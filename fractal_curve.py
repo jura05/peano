@@ -15,7 +15,7 @@ class BaseMap:
 
     def apply(self, x):
         """Apply isometry to a point x of [0,1]^d."""
-        return [1-x[ki] if bi else x[ki] for ki, bi in self.cube_map]
+        return tuple(1-x[ki] if bi else x[ki] for ki, bi in self.cube_map)
 
 
 
@@ -24,9 +24,9 @@ class FractalCurve:
     Params:
         div         positive integer, number of divisions of each side of the cube (characteristic of a curve)
         dim         dimension (default: 2)
-        proto       curve prototype - sequence of "squares" (x,y)
-        begin       entrance point
-        end         exit point
+        proto       curve prototype - sequence of "cubes" enumerated as (x_0,..,x_{d-1}), 0<=x_j<div
+        entrance    entrance point
+        exit        exit point
         base_maps   sequence of base maps (instances of BaseMap class)
 
     For examples see get_hilbert_curve()
@@ -46,34 +46,38 @@ class FractalCurve:
     def check(self):
         """Check consistency of curve params."""
         n = self.div
+        d = self.dim
 
         # dummy checks
         assert n > 0
         assert len(self.proto) == self.genus(), 'bad proto length'
 
-        for sq in self.proto:
-            assert (0 <= sq[0] < n and 0 <= sq[1] < n), 'bad square coordinates'
-        sqset = set((sq[0], sq[1]) for sq in self.proto)
-        assert len(sqset) == len(self.proto), 'non-unique squares'
+        for cube in self.proto:
+            for j in range(d):
+                assert 0 <= cube[j] < n, 'bad cube coordinates'
+        sqset = set(tuple(cube) for cube in self.proto)
+        assert len(sqset) == len(self.proto), 'non-unique cubes'
 
-        assert (0 <= self.entrance[0] < n and 0 <= self.entrance[1] < n), 'bad entrance'
-        assert (0 <= self.exit[0] < n and 0 <= self.exit[1] < n), 'bad exit'
+        for j in range(d):
+            assert 0 <= self.entrance[j] < n , 'bad entrance'
+            assert 0 <= self.exit[j] < n, 'bad exit'
 
         # проверяем соответствие входов-выходов
         gates = []  # пары (вход,выход), реальные координаты в кубе, умноженные на div
-        gates.append((None, (n*self.entrance[0], n*self.entrance[1])))  # начальный вход
-        for sq, bm in zip(self.proto, self.base_maps):
+        entrance_n = tuple(n*self.entrance[j] for j in range(d))  # начальный вход
+        gates.append((None, entrance_n))
+        for cube, bm in zip(self.proto, self.base_maps):
             entrance_pos = bm.apply(self.entrance)
-            entrance = (sq[0] + entrance_pos[0], sq[1] + entrance_pos[1])
+            entrance_n = tuple(cube[j] + entrance_pos[j] for j in range(d))
             exit_pos = bm.apply(self.exit)
-            exit = (sq[0] + exit_pos[0], sq[1] + exit_pos[1])
+            exit_n = tuple(cube[j] + exit_pos[j] for j in range(d))
             if bm.time_rev:
-                gates.append((exit,entrance))
+                gates.append((exit_n,entrance_n))
             else:
-                gates.append((entrance,exit))
-        gates.append(((n*self.exit[0], n*self.exit[1]), None))
+                gates.append((entrance_n,exit_n))
+        exit_n = tuple(n*self.exit[j] for j in range(d))
+        gates.append((exit_n, None))
 
-        print(gates)
         for i in range(len(gates)-1):
             assert gates[i][1] == gates[i+1][0], 'exit does not correspond to entrance'
 
@@ -91,3 +95,29 @@ def get_hilbert_curve():
             BaseMap([(1,True),(0,True)]),  # (x,y)->(1-y,1-x)
         ],
     )
+
+def get_peano_curve():
+    """Example of fractal curve due to G.Peano."""
+    id_map = BaseMap([(0,False),(1,False)])
+    x_map  = BaseMap([(0,True),(1,False)])  # (x,y)->(1-x,y)
+    y_map  = BaseMap([(0,False),(1,True)])  # (x,y)->(x,1-y)
+    xy_map = BaseMap([(0,True),(1,True)])   # (x,y)->(1-x,1-y)
+    return FractalCurve(
+        dim=2, div=3,
+        entrance=(0,0), exit=(1,1),
+        proto=[(0,0),(0,1),(0,2),(1,2),(1,1),(1,0),(2,0),(2,1),(2,2)],
+        base_maps=[
+            id_map, x_map, id_map,
+            y_map, xy_map, y_map,
+            id_map, x_map, id_map,
+        ],
+    )
+
+def main():
+    # run some tests
+    for curve in [get_hilbert_curve(), get_peano_curve()]:
+        curve.check()
+    print("ok!")
+
+if __name__ == "__main__":
+    main()
