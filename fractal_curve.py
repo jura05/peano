@@ -24,9 +24,24 @@ class BaseMap:
     def __init__(self, perm, flip, time_rev=False):
         assert len(perm) == len(flip)
         self.dim = len(perm)
-        self.perm = perm
-        self.flip = [bool(b) for b in flip]
+        # store data in tuples to make object immutable
+        self.perm = tuple(perm)
+        self.flip = tuple(bool(b) for b in flip)
         self.time_rev = bool(time_rev)
+
+
+    def __eq__(self, other):
+        return (self.perm, self.flip, self.time_rev) == (other.perm, other.flip, other.time_rev)
+
+    def __hash__(self):
+        return hash((self.perm, self.flip, self.time_rev))
+
+    def __str__(self):
+        s = "base_map: (" + ",".join(["x_{}".format(i) for i in range(self.dim)]) + ")"
+        s += "->("
+        s += ",".join([("1-x_{}" if b else "x_{}").format(k) for k, b in zip(self.perm, self.flip)])
+        s += "), t->" + ("1-t" if self.time_rev else "t")
+        return s
 
     def __mul__(self, other):
         """Composition of base maps."""
@@ -53,11 +68,11 @@ class BaseMap:
 
     def apply_x(self, x):
         """Apply isometry to a point x of [0,1]^d."""
-        return [1-x[ki] if bi else x[ki] for ki, bi in zip(self.perm, self.flip)]
+        return tuple(1-x[ki] if bi else x[ki] for ki, bi in zip(self.perm, self.flip))
 
     def apply_cube(self, div, cube):
         """Apply isometry to a sub-cube."""
-        return [div-cube[ki]-1 if bi else cube[ki] for ki, bi in zip(self.perm, self.flip)]
+        return tuple(div-cube[ki]-1 if bi else cube[ki] for ki, bi in zip(self.perm, self.flip))
 
 
 class FractalCurve:
@@ -152,3 +167,41 @@ class FractalCurve:
 
         for i in range(len(gates)-1):
             assert gates[i][1] == gates[i+1][0], 'exit does not correspond to entrance'
+
+    def get_junctions(self):
+        """Junction is a pair (delta, base_map). Get all junctions of a curve."""
+        junctions = set()
+
+        for i in range(self.genus()-1):
+            cube = self.proto[i]
+            next_cube = self.proto[i+1]
+            delta = tuple(nc-c for nc, c in zip(next_cube, cube))
+            junctions.add(self._get_std_junction(delta, self.base_maps[i], self.base_maps[i+1]))
+
+        to_derive = list(junctions)
+        while to_derive:
+            junction = to_derive.pop()
+            dj = self.get_derived_junction(junction)
+            if dj not in junctions:
+                junctions.add(dj)
+                to_derive.append(dj)
+
+        return junctions
+
+
+    # здесь пока не учитываем time_rev !!!
+    def get_derived_junction(self, junction):
+        delta, base_map = junction
+        cube1 = self.proto[-1]
+        cube2 = base_map.apply_cube(self.div, self.proto[0])
+        der_delta = tuple(delta[k]*self.div + cube2[k] - cube1[k] for k in range(self.dim))
+        return self._get_std_junction(der_delta, self.base_maps[-1], base_map * self.base_maps[0])
+
+    # поворачиваем, чтобы обеспечить тождественное преобразование на первой фракции
+    @staticmethod
+    def _get_std_junction(delta, bm1, bm2):
+        bm1_inv = bm1.inverse()
+        arr_beg = bm1_inv.apply_x((0,0))
+        arr_end = bm1_inv.apply_x(delta)
+        std_delta = tuple(e-b for e,b in zip(arr_end, arr_beg))
+        return (std_delta, bm1_inv * bm2)

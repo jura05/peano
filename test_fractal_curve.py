@@ -51,11 +51,20 @@ def main():
         print('entrance:', curve.entrance)
         print('exit:', curve.exit)
         try:
+            id_map = BaseMap.id_map(curve.dim)
+            for bm in curve.base_maps:
+                # заодно проверим BaseMap
+                inv = bm.inverse()
+                assert bm * inv == id_map, 'base_map multiplication'
+                assert inv * bm == id_map, 'base_map multiplication'
             curve.check()
             print('check ok!')
         except Exception as exc:
             print('check failed:', exc)
             continue
+
+        for delta, base_map in curve.get_junctions():
+            print('junction:', delta, base_map)
 
         print()
 
