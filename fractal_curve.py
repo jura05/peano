@@ -42,6 +42,15 @@ class BaseMap:
         time_rev = self.time_rev ^ other.time_rev
         return self.__class__(perm, flip, time_rev)
 
+    def inverse(self):
+        """Inverse of base map."""
+        perm = [None]*self.dim
+        flip = [None]*self.dim
+        for i, k, b in zip(range(self.dim), self.perm, self.flip):
+            perm[k] = i
+            flip[k] = b
+        return self.__class__(perm, flip, self.time_rev)
+
     def apply_x(self, x):
         """Apply isometry to a point x of [0,1]^d."""
         return [1-x[ki] if bi else x[ki] for ki, bi in zip(self.perm, self.flip)]
