@@ -1,5 +1,14 @@
 Changelog.
 
+
+2018-02-13
+BaseMap:
+- применение `base_map` к кривой (`apply_curve`)
+FractalCurve:
+- получение объекта кривой-фракции (`get_subcurve`)
+- получения кривой-подразбиения (`get_subdivision`)
+
+
 2017-12-19
 
 BaseMap:

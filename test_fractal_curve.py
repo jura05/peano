@@ -63,10 +63,19 @@ def main():
             print('check failed:', exc)
             continue
 
+        for i in range(curve.genus()):
+            subcurve = curve.get_subcurve(i)
+            subcurve.check()
+        print('subcurves are correct')
+
+        subdiv_curve = curve.get_subdivision()
+        subdiv_curve.check()
+        print('subdivision is correct')
+
         for delta, base_map in curve.get_junctions():
             print('junction:', delta, base_map)
-
         print()
+
 
 if __name__ == "__main__":
     main()

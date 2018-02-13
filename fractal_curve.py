@@ -29,7 +29,6 @@ class BaseMap:
         self.flip = tuple(bool(b) for b in flip)
         self.time_rev = bool(time_rev)
 
-
     def __eq__(self, other):
         return (self.perm, self.flip, self.time_rev) == (other.perm, other.flip, other.time_rev)
 
@@ -37,10 +36,14 @@ class BaseMap:
         return hash((self.perm, self.flip, self.time_rev))
 
     def __str__(self):
-        s = "base_map: (" + ",".join(["x_{}".format(i) for i in range(self.dim)]) + ")"
+        if self.dim > 3:
+            letters = ['x_{}'.format(i) for i in range(self.dim)]
+        else:
+            letters = "xyz"[:self.dim]
+        s = "(" + ",".join(letters) + ")"
         s += "->("
-        s += ",".join([("1-x_{}" if b else "x_{}").format(k) for k, b in zip(self.perm, self.flip)])
-        s += "), t->" + ("1-t" if self.time_rev else "t")
+        s += ",".join([("1-{}" if b else "{}").format(letters[k]) for k, b in zip(self.perm, self.flip)])
+        s += "),t->" + ("1-t" if self.time_rev else "t")
         return s
 
     def __mul__(self, other):
@@ -55,7 +58,7 @@ class BaseMap:
             perm.append(k)
             flip.append(b1 ^ b2)
         time_rev = self.time_rev ^ other.time_rev
-        return self.__class__(perm, flip, time_rev)
+        return type(self)(perm, flip, time_rev)
 
     def inverse(self):
         """Inverse of base map."""
@@ -64,15 +67,31 @@ class BaseMap:
         for i, k, b in zip(range(self.dim), self.perm, self.flip):
             perm[k] = i
             flip[k] = b
-        return self.__class__(perm, flip, self.time_rev)
+        return type(self)(perm, flip, self.time_rev)
 
     def apply_x(self, x):
         """Apply isometry to a point x of [0,1]^d."""
         return tuple(1-x[ki] if bi else x[ki] for ki, bi in zip(self.perm, self.flip))
 
+    def apply_vec(self, v):
+        """Apply linear part of isometry to a vector."""
+        beg = self.apply_x((0,) * len(v))
+        end = self.apply_x(v)
+        return tuple(e-b for e, b in zip(end, beg))
+
     def apply_cube(self, div, cube):
         """Apply isometry to a sub-cube."""
         return tuple(div-cube[ki]-1 if bi else cube[ki] for ki, bi in zip(self.perm, self.flip))
+
+    def apply_curve(self, curve):
+        """Apply base map to a curve, return new curve (TODO: use time_rev!)."""
+        inv = self.inverse()
+        return type(curve)(
+            div = curve.div,
+            dim = curve.dim,
+            proto = [self.apply_cube(curve.div, cube) for cube in curve.proto],
+            base_maps = [self * bm * inv for bm in curve.base_maps],
+        )
 
 
 class FractalCurve:
@@ -80,7 +99,7 @@ class FractalCurve:
     Params:
         div         positive integer, number of divisions of each side of the cube (characteristic of a curve)
         dim         dimension (default: 2)
-        proto       curve prototype - sequence of "cubes" with coordinates (x_0,..,x_{d-1}), 0<=x_j<div
+        proto       curve prototype - sequence of "cubes" with integer coordinates (x_0,..,x_{d-1}), 0<=x_j<div
         base_maps   sequence of base maps (instances of BaseMap class)
         entrance    entrance point (default: None, i.e. determine by proto & base_maps)
         exit        exit point (default: None, see entrance)
@@ -100,6 +119,31 @@ class FractalCurve:
 
     def get_exit(self):
         return self._get_limit(self.div, self.proto[-1], self.base_maps[-1])
+
+    def get_subcurve(self, i):
+        """Get fraction as a curve."""
+        return self.base_maps[i].apply_curve(self)
+
+    def get_subdivision(self):
+        """Get divided curve (with squared genius)."""
+        N = self.div
+        new_proto = []
+        new_base_maps = []
+        for cube, base_map in zip(self.proto, self.base_maps):
+            for c in self.proto:
+                nc = base_map.apply_cube(N, c)
+                new_cube = [cj*N + ncj for cj, ncj in zip(cube, nc)]
+                new_proto.append(new_cube)
+
+            for bm in self.base_maps:
+                new_base_maps.append(bm * base_map)
+
+        return type(self)(
+            dim = self.dim,
+            div = N**2,
+            proto = new_proto,
+            base_maps = new_base_maps,
+        )
 
     @staticmethod
     def _get_limit(div, cube, base_map):
@@ -201,7 +245,4 @@ class FractalCurve:
     @staticmethod
     def _get_std_junction(delta, bm1, bm2):
         bm1_inv = bm1.inverse()
-        arr_beg = bm1_inv.apply_x((0,0))
-        arr_end = bm1_inv.apply_x(delta)
-        std_delta = tuple(e-b for e,b in zip(arr_end, arr_beg))
-        return (std_delta, bm1_inv * bm2)
+        return (bm1_inv.apply_vec(delta), bm1_inv * bm2)
