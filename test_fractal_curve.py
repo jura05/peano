@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # coding: utf-8
 
-from fractal_curve import FractalCurve, BaseMap
+from fractal_curve import FractalCurve
+from base_map import BaseMap
 
 def get_hilbert_curve():
     """Example of fractal curve due to D.Hilbert."""
@@ -41,6 +42,7 @@ def get_discontinuous_curve():
     )
 
 def main():
+
     # run some tests
     for curve, name in [
         (get_hilbert_curve(), 'Hilbert'),

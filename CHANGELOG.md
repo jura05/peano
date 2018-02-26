@@ -1,5 +1,8 @@
 Changelog.
 
+2018-02-26
+Разделение BaseMap и FractalCurve на два файла.
+Метод `BaseMap.apply_curve` переехал в `FractalCurve.apply_base_map`
 
 2018-02-13
 BaseMap:
