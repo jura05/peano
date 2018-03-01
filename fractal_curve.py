@@ -1,5 +1,6 @@
 # coding: utf-8
 
+from base_map import BaseMap
 from fractions import Fraction
 
 class FractalCurve:
@@ -23,10 +24,10 @@ class FractalCurve:
         self.exit = exit if exit is not None else self.get_exit()
 
     def get_entrance(self):
-        return self._get_limit(self.div, self.proto[0], self.base_maps[0])
+        return self._get_limit(self.proto[0], self.base_maps[0])
 
     def get_exit(self):
-        return self._get_limit(self.div, self.proto[-1], self.base_maps[-1])
+        return self._get_limit(self.proto[-1], self.base_maps[-1])
 
     def apply_base_map(self, base_map):
         """Apply base map to a fractal curve, return new curve (TODO: use time_rev!)."""
@@ -63,8 +64,44 @@ class FractalCurve:
             base_maps = new_base_maps,
         )
 
-    @staticmethod
-    def _get_limit(div, cube, base_map):
+    def _get_edge_cnum(self, edge):
+        """Edge is a tuple of {0,1,None} defining a set
+        {(x_0,...,x_{d-1}): x_i==0 if e[i]==0, x_i==1 if e[i]==1, or arbitrary x[i] if e[i] is None."""
+
+        N = self.div
+        def check_touch(cube, edge, N):
+            for x, e in zip(cube, edge):
+                if e is None:
+                    continue
+                if e and x != (N-1):
+                    return False
+                if (not e) and x != 0:
+                    return False
+            return True
+
+        for i, cube in enumerate(self.proto):
+            if check_touch(cube, edge, N):
+                return i
+
+    def get_edge_touch(self, edge):
+        curve = self
+        cur_map = BaseMap.id_map(self.dim)
+        cnum_period = []
+        seen = set()
+        while True:
+            cnum = curve._get_edge_cnum(edge)
+            bm = curve.base_maps[cnum]
+            if bm in seen: break
+
+            cnum_period.append(cnum)
+            cur_map = bm * cur_map
+            curve = self.apply_base_map(bm)
+            seen.add(bm)
+
+        return self._get_periodic_time_limit(cnum_period)
+
+    def _get_limit(self, cube, base_map):
+        div = self.div
         cube_period = [cube]
         cur_map = base_map
         # составляем номера под-кубов (в изначальной ориентации)
@@ -76,17 +113,27 @@ class FractalCurve:
                 break
             cube_period.append(new_cube)
 
-        # суммируем геометрическую прогрессию (левые нижние углы кубов) со знаменателем div**(-m)
-        m = len(cube_period)
-        x = 0
-        y = 0
-        for i, c in enumerate(cube_period):
-            x += c[0] * div**(m-1-i) 
-            y += c[1] * div**(m-1-i)
+        return self._get_periodic_limit(cube_period)
 
-        lx = Fraction(x, div**m - 1)
-        ly = Fraction(y, div**m - 1)
-        return (lx,ly)
+    def _get_periodic_time_limit(self, cnum_period):
+        g = self.genus()
+        t = 0
+        m = len(cnum_period)
+        for i, cnum in enumerate(cnum_period):
+            t += cnum * g**(m-1-i) 
+
+        return Fraction(t, g**m - 1)
+
+    # суммируем геометрическую прогрессию (левые нижние углы кубов) со знаменателем 1/div
+    def _get_periodic_limit(self, cube_period):
+        div = self.div
+        m = len(cube_period)
+        pt = [0] * self.dim
+        for i, cube in enumerate(cube_period):
+            for j, c in enumerate(cube):
+                pt[j] += c * div**(m-1-i) 
+
+        return tuple(Fraction(x, div**m - 1) for x in pt)
 
     def genus(self):
         """Fractal genus of the curve."""

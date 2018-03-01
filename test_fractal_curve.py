@@ -42,6 +42,12 @@ def get_discontinuous_curve():
     )
 
 def main():
+    curve = get_peano_curve()
+    for xe in [0,1,None]:
+        for ye in [0,1,None]:
+            edge = (xe,ye)
+            print(edge, curve.get_edge_touch(edge))
+    return
 
     # run some tests
     for curve, name in [

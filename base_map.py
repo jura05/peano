@@ -10,6 +10,8 @@ class BaseMap:
                       (x_0,...,x_{d-1}) --> (f(b_0;x_{k_0}), ..., f(b_{d-1};x_{k_{d-1}})),
                       where f(b;x)=x if b is False, and 1-x otherwise
         time_rev:   time reversal (boolean), default: False
+
+    Immutable and hashable.
     """
 
     @classmethod
@@ -21,7 +23,9 @@ class BaseMap:
 
     def __init__(self, perm, flip, time_rev=False):
         assert len(perm) == len(flip)
+        assert (not time_rev), 'time_rev not supported!'
         self.dim = len(perm)
+
         # store data in tuples to make object immutable
         self.perm = tuple(perm)
         self.flip = tuple(bool(b) for b in flip)
@@ -82,5 +86,6 @@ class BaseMap:
         """Apply isometry to a sub-cube."""
         return tuple(div-cube[k]-1 if b else cube[k] for k, b in zip(self.perm, self.flip))
 
-    def apply_curve(self, curve):
-        """Apply base map to a fractal curve, return new curve (TODO: use time_rev!)."""
+    def apply_edge(self, edge):
+        """Apply isometry to an edge. Not implemented!"""
+        pass
