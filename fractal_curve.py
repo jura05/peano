@@ -7,36 +7,52 @@ class FractalCurve:
     """Class representing fractal peano curve in [0,1]^d.
     Params:
         div         positive integer, number of divisions of each side of the cube (characteristic of a curve)
-        dim         dimension (default: 2)
+        dim         dimension
         proto       curve prototype - sequence of "cubes" with integer coordinates (x_0,..,x_{d-1}), 0<=x_j<div
+          or
+        chain_code  'ikjKJ'
         base_maps   sequence of base maps (instances of BaseMap class)
-        entrance    entrance point (default: None, i.e. determine by proto & base_maps)
-        exit        exit point (default: None, see entrance)
 
     For examples see get_hilbert_curve()
     """
-    def __init__(self, div, proto, base_maps, entrance=None, exit=None, dim=2):
+    def __init__(self, dim, div, base_maps, proto=None, chain_code=None):
         self.div = div
         self.dim = dim
-        self.proto = proto
-        self.base_maps = base_maps
-        self.entrance = entrance if entrance is not None else self.get_entrance()
-        self.exit = exit if exit is not None else self.get_exit()
+        if chain_code is not None:
+            proto = _chain2proto(dim, chain_code)
+
+        self.proto = tuple(proto)
+        self.base_maps = tuple(base_maps)
 
     def get_entrance(self):
-        return self._get_limit(self.proto[0], self.base_maps[0])
+        return self._get_limit(0)
 
     def get_exit(self):
-        return self._get_limit(self.proto[-1], self.base_maps[-1])
+        return self._get_limit(self.genus()-1)
+
+    def reverse(self):
+        return type(self)(
+            dim = self.dim,
+            div = self.div,
+            proto = reversed(self.proto),
+            base_maps = reversed(self.base_maps),
+        )
 
     def apply_base_map(self, base_map):
-        """Apply base map to a fractal curve, return new curve (TODO: use time_rev!)."""
-        inv = base_map.inverse()
+        """Apply base map to a fractal curve, return new curve."""
+        if base_map.time_rev:
+            curve = self.reverse()
+            cube_map = base_map.cube_map()
+        else:
+            curve = self
+            cube_map = base_map
+
+        inv = cube_map.inverse()
         return type(self)(
-            div = self.div,
             dim = self.dim,
-            proto = [base_map.apply_cube(self.div, cube) for cube in self.proto],
-            base_maps = [base_map * bm * inv for bm in self.base_maps],
+            div = self.div,
+            proto = [cube_map.apply_cube(curve.div, cube) for cube in curve.proto],
+            base_maps = [cube_map * bm * inv for bm in curve.base_maps],
         )
 
     def get_subcurve(self, i):
@@ -44,18 +60,27 @@ class FractalCurve:
         return self.apply_base_map(self.base_maps[i])
 
     def get_subdivision(self):
-        """Get divided curve (with squared genius)."""
+        """Get divided curve (with squared genus)."""
         N = self.div
         new_proto = []
         new_base_maps = []
         for cube, base_map in zip(self.proto, self.base_maps):
-            for c in self.proto:
-                nc = base_map.apply_cube(N, c)
-                new_cube = [cj*N + ncj for cj, ncj in zip(cube, nc)]
-                new_proto.append(new_cube)
+            if not base_map.time_rev:
+                for c in self.proto:
+                    nc = base_map.apply_cube(N, c)
+                    new_cube = [cj*N + ncj for cj, ncj in zip(cube, nc)]
+                    new_proto.append(new_cube)
 
-            for bm in self.base_maps:
-                new_base_maps.append(bm * base_map)
+                for bm in self.base_maps:
+                    new_base_maps.append(base_map * bm)
+            else:
+                for c in reversed(self.proto):
+                    nc = base_map.apply_cube(N, c)
+                    new_cube = [cj*N + ncj for cj, ncj in zip(cube, nc)]
+                    new_proto.append(new_cube)
+
+                for bm in reversed(self.base_maps):
+                    new_base_maps.append(base_map * bm)
 
         return type(self)(
             dim = self.dim,
@@ -83,48 +108,70 @@ class FractalCurve:
             if check_touch(cube, edge, N):
                 return i
 
+
     def get_edge_touch(self, edge):
         curve = self
-        cur_map = BaseMap.id_map(self.dim)
-        cnum_period = []
-        seen = set()
+        cur_map = BaseMap(dim=self.dim)  # curve = cur_map * self
+        cnums = []
+        index = {}
         while True:
             cnum = curve._get_edge_cnum(edge)
             bm = curve.base_maps[cnum]
-            if bm in seen: break
+            cnums.append(cnum)
 
-            cnum_period.append(cnum)
+            index[cur_map] = len(cnums)-1
+
             cur_map = bm * cur_map
-            curve = self.apply_base_map(bm)
-            seen.add(bm)
+            if cur_map in index:
+                period_start = index[cur_map]
+                break
+            curve = curve.apply_base_map(bm)
 
-        return self._get_periodic_time_limit(cnum_period)
+        return self._get_time_limit(cnums, period_start)
 
-    def _get_limit(self, cube, base_map):
+
+    def _get_limit(self, cnum):
         div = self.div
-        cube_period = [cube]
-        cur_map = base_map
+        genus = self.genus()
+
+        cur_map = BaseMap(dim=self.dim)  # current curve = cur_map * self
+        seen = set()
+        cube_period = []
+
         # составляем номера под-кубов (в изначальной ориентации)
         # каждый следующий куб получается умножением слева на base_map
         while True:
-            new_cube = cur_map.apply_cube(div, cube)
-            cur_map = base_map * cur_map
-            if tuple(new_cube) == tuple(cube):
+            if cur_map.time_rev:
+                cur_cnum = genus-1-cnum
+            else:
+                cur_cnum = cnum
+            cube = cur_map.apply_cube(div, self.proto[cur_cnum])
+            cube_period.append(cube)
+            cur_map = cur_map * self.base_maps[cur_cnum]
+            if cur_map in seen:
                 break
-            cube_period.append(new_cube)
+            seen.add(cur_map)
 
         return self._get_periodic_limit(cube_period)
 
-    def _get_periodic_time_limit(self, cnum_period):
+    def _get_time_limit(self, cnums, period_start):
         g = self.genus()
-        t = 0
-        m = len(cnum_period)
-        for i, cnum in enumerate(cnum_period):
-            t += cnum * g**(m-1-i) 
+        t0 = Fraction(0, 1)
 
-        return Fraction(t, g**m - 1)
+        cnum_base = cnums[0:period_start]
+        for i, cnum in enumerate(cnum_base):
+            t0 += Fraction(cnum, g**(i+1))
+
+        cnum_period = cnums[period_start:]
+        m = len(cnum_period)
+        tp = 0
+        for i, cnum in enumerate(cnum_period):
+            tp += cnum * g**(m-1-i) 
+
+        return t0 + Fraction(tp, g**period_start*(g**m - 1))
 
     # суммируем геометрическую прогрессию (левые нижние углы кубов) со знаменателем 1/div
+    # ТУТ ТОЖЕ НЕ ПЕРИОДИЧЕСКИ МОЖЕТ БЫТЬ
     def _get_periodic_limit(self, cube_period):
         div = self.div
         m = len(cube_period)
@@ -154,31 +201,38 @@ class FractalCurve:
         sqset = set(tuple(cube) for cube in self.proto)
         assert len(sqset) == len(self.proto), 'non-unique cubes'
 
-        for j in range(d):
-            assert 0 <= self.entrance[j] < n , 'bad entrance'
-            assert 0 <= self.exit[j] < n, 'bad exit'
+        entrance = self.get_entrance()
+        exit = self.get_exit()
 
         # проверяем соответствие входов-выходов
         gates = []  # пары (вход,выход), реальные координаты в кубе, умноженные на div
-        entrance_n = tuple(n*self.entrance[j] for j in range(d))  # начальный вход
+        entrance_n = tuple(n*entrance[j] for j in range(d))  # начальный вход
         gates.append((None, entrance_n))
         for cube, bm in zip(self.proto, self.base_maps):
-            entrance_pos = bm.apply_x(self.entrance)
+            entrance_pos = bm.apply_x(entrance)
             entrance_n = tuple(cube[j] + entrance_pos[j] for j in range(d))
-            exit_pos = bm.apply_x(self.exit)
+            exit_pos = bm.apply_x(exit)
             exit_n = tuple(cube[j] + exit_pos[j] for j in range(d))
             if bm.time_rev:
                 gates.append((exit_n,entrance_n))
             else:
                 gates.append((entrance_n,exit_n))
-        exit_n = tuple(n*self.exit[j] for j in range(d))
+        exit_n = tuple(n*exit[j] for j in range(d))
         gates.append((exit_n, None))
 
         for i in range(len(gates)-1):
             assert gates[i][1] == gates[i+1][0], 'exit does not correspond to entrance'
 
+
+    #
+    # Стыки. Реализовано для кривых без обращения времени
+    #
+
     def get_junctions(self):
         """Junction is a pair (delta, base_map). Get all junctions of a curve."""
+        if any(bm.time_rev for bm in self.base_maps):
+            raise Exception("get_junctions not implemented for time reverse!")
+
         junctions = set()
 
         for i in range(self.genus()-1):
@@ -197,8 +251,6 @@ class FractalCurve:
 
         return junctions
 
-
-    # здесь пока не учитываем time_rev !!!
     def get_derived_junction(self, junction):
         delta, base_map = junction
         cube1 = self.proto[-1]
@@ -211,3 +263,29 @@ class FractalCurve:
     def _get_std_junction(delta, bm1, bm2):
         bm1_inv = bm1.inverse()
         return (bm1_inv.apply_vec(delta), bm1_inv * bm2)
+
+
+# some utility functions
+def _chain2proto(dim, chain_code, start=None):
+    """Convert chain code like 'ijK' to curve prototype."""
+    assert dim <= 6
+    letters = 'ijklmn'
+    l2v = {}
+    for k in range(dim):
+        l = letters[k]
+        v = [0] * dim
+        v[k] = 1
+        l2v[l] = v
+        l2v[l.upper()] = [-x for x in v]
+
+    if start is None:
+        start = (0,) * dim
+
+    cube = start
+    proto = [cube]
+    for l in chain_code:
+        diff = l2v[l]
+        cube = [c + d for c, d in zip(cube, diff)]
+        proto.append(cube)
+
+    return proto

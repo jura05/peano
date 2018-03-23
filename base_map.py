@@ -2,34 +2,43 @@
 
 class BaseMap:
     """Base map: isometry of cube and (possibly) time reversal.
-    Params:
+    Immutable and hashable.
+    Acts on function f:[0,1]->[0,1]^d as  Bf: [0,1]--B_t-->[0,1]--f-->[0,1]^d--B_x-->[0,1]^d
+    """
+
+    def __init__(self, perm=None, flip=None, time_rev=False, dim=None, basis=None):
+        """Create a BaseMap instance.
+        Params:
         perm, flip: params, which define isometry of cube
                       perm = [k_0,...,k_{d-1}]
                       flip = [b_0,...,b_{d-1}]
                       define the map
                       (x_0,...,x_{d-1}) --> (f(b_0;x_{k_0}), ..., f(b_{d-1};x_{k_{d-1}})),
                       where f(b;x)=x if b is False, and 1-x otherwise
+          or
+        basis:      'ijK'
+          or
+        dim:        dimension only (defines identity map)
+
         time_rev:   time reversal (boolean), default: False
+        """
 
-    Immutable and hashable.
-    """
+        if basis is not None:
+            perm, flip = _parse_basis(basis)
+        if dim is not None:
+            perm = list(range(dim))
+            flip = [False]*dim
 
-    @classmethod
-    def id_map(cls, dim):
-        perm = list(range(dim))
-        flip = [False]*dim
-        time_rev = False
-        return cls(perm, flip, time_rev)
-
-    def __init__(self, perm, flip, time_rev=False):
         assert len(perm) == len(flip)
-        assert (not time_rev), 'time_rev not supported!'
         self.dim = len(perm)
 
         # store data in tuples to make object immutable
         self.perm = tuple(perm)
         self.flip = tuple(bool(b) for b in flip)
         self.time_rev = bool(time_rev)
+
+    def cube_map(self):
+        return type(self)(self.perm, self.flip, False)
 
     def _data(self):
         return (self.perm, self.flip, self.time_rev)
@@ -48,7 +57,9 @@ class BaseMap:
         s = "(" + ",".join(letters) + ")"
         s += "->("
         s += ",".join([("1-{}" if b else "{}").format(letters[k]) for k, b in zip(self.perm, self.flip)])
-        s += "),t->" + ("1-t" if self.time_rev else "t")
+        s += ")"
+        if self.time_rev:
+            s += "t->-t"
         return s
 
     def __mul__(self, other):
@@ -57,9 +68,10 @@ class BaseMap:
         perm = []
         flip = []
         for i in range(self.dim):
-            k = other.perm[self.perm[i]]
+            p = self.perm[i]
+            k = other.perm[p]
             b1 = self.flip[i]
-            b2 = other.flip[self.perm[i]]
+            b2 = other.flip[p]
             perm.append(k)
             flip.append(b1 ^ b2)
         time_rev = self.time_rev ^ other.time_rev
@@ -89,3 +101,19 @@ class BaseMap:
     def apply_edge(self, edge):
         """Apply isometry to an edge. Not implemented!"""
         pass
+
+def _parse_basis(basis):
+    dim = len(basis)
+    letters = 'ijklmn'
+    assert dim <= 6
+
+    l2i = {l: i for i, l in enumerate(letters)}
+    perm = [None]*dim
+    flip = [None]*dim
+
+    for k, l in enumerate(basis):
+        lk = l.lower()
+        perm[k] = l2i[lk]
+        flip[k] = (l != lk)
+    
+    return perm, flip
