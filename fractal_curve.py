@@ -4,6 +4,7 @@ from fractions import Fraction
 
 from base_map import BaseMap
 
+
 class FractalCurve:
     """Class representing fractal peano curve in [0,1]^d.
     Params:
@@ -32,7 +33,7 @@ class FractalCurve:
         self.base_maps = tuple(base_maps)
 
     def _data(self):
-        return (self.dim, self.div, self.proto, self.base_maps)
+        return self.dim, self.div, self.proto, self.base_maps
 
     def __eq__(self, other):
         return self._data() == other._data()
@@ -97,44 +98,49 @@ class FractalCurve:
         """Get fraction as a curve."""
         return self.apply_base_map(self.base_maps[cnum])
 
-    def get_subdivision(self):
-        """Get divided curve (with squared genus)."""
+    def get_subdivision(self, k=1):
+        """Get k-th subdivision of a curve."""
         N = self.div
-        new_proto = []
-        new_base_maps = []
-        for cube, base_map in zip(self.proto, self.base_maps):
-            proto = self.proto
-            base_maps = self.base_maps
+        current_curve = self
+        for _ in range(k):
+            new_proto = []
+            new_base_maps = []
+            for cube, base_map in zip(current_curve.proto, current_curve.base_maps):
+                proto = self.proto
+                base_maps = self.base_maps
 
-            if base_map.time_rev:
-                # в этой фракции прототип и базовые преобразования идут в обратном порядке
-                proto = reversed(proto)
-                base_maps = reversed(base_maps)
+                if base_map.time_rev:
+                    # в этой фракции прототип и базовые преобразования идут в обратном порядке
+                    proto = reversed(proto)
+                    base_maps = reversed(base_maps)
 
-            for c in proto:
-                nc = base_map.apply_cube(N, c)
-                new_cube = [cj*N + ncj for cj, ncj in zip(cube, nc)]
-                new_proto.append(new_cube)
+                for c in proto:
+                    nc = base_map.apply_cube(N, c)
+                    new_cube = [cj*N + ncj for cj, ncj in zip(cube, nc)]
+                    new_proto.append(new_cube)
 
-            # базовые преобразования для подраздедения:
-            # пусть (cube, base_map) соответствуют i-й фракции
-            # в ней мы взяли j-ю подфракцию (bm)
-            # Какое преобразование переводит кривую в j-ю фракцию внутри i-й?
-            # - сначала к исходной кривой мы применим bm, чтобы перевести её в j-ю фракцию,
-            # - потом ко всей этой картинке применяем base_map, чтобы перевести всё в i-ю фракцию (base_map)
-            # можно сделать наоборот:
-            # - сначала кривую переводим в i-ю фракцию (base_map)
-            # - применяем внутри i-й фракции преобразования для перехода в j-ю
-            #   но там оно будет сопряженное: base_map * bm * base_map^{-1}, см. apply_base_map
-            for bm in base_maps:
-                new_base_maps.append(base_map * bm)
+                # базовые преобразования для подраздедения:
+                # пусть (cube, base_map) соответствуют i-й фракции
+                # в ней мы взяли j-ю подфракцию (bm)
+                # Какое преобразование переводит кривую в j-ю фракцию внутри i-й?
+                # - сначала к исходной кривой мы применим bm, чтобы перевести её в j-ю фракцию,
+                # - потом ко всей этой картинке применяем base_map, чтобы перевести всё в i-ю фракцию (base_map)
+                # можно сделать наоборот:
+                # - сначала кривую переводим в i-ю фракцию (base_map)
+                # - применяем внутри i-й фракции преобразования для перехода в j-ю
+                #   но там оно будет сопряженное: base_map * bm * base_map^{-1}, см. apply_base_map
+                for bm in base_maps:
+                    new_base_maps.append(base_map * bm)
 
-        return type(self)(
-            dim = self.dim,
-            div = N**2,
-            proto = new_proto,
-            base_maps = new_base_maps,
-        )
+            current_curve = type(self)(
+                dim = self.dim,
+                div = N*current_curve.div,
+                proto = new_proto,
+                base_maps = new_base_maps,
+            )
+
+        return current_curve
+
 
     #
     # Точки входа-выхода, время выхода на грань
@@ -182,6 +188,54 @@ class FractalCurve:
             period_j = [x[j] for x in period]
             p[j] = self._get_periodic_sum(start_j, period_j, self.div)
         return tuple(p)
+
+    def get_vertex_moments(self):
+        # строим список всех вершин
+        vertices = [[]]
+        for j in range(self.dim):
+            new_vertices = []
+            for xj in [0,1]:
+                for edge in vertices:
+                    new_edge = edge + [xj]
+                    new_vertices.append(new_edge)
+            vertices = new_vertices
+        moment = {}
+        for v in vertices:
+            moment[tuple(v)] = self.get_edge_touch(v)
+        return moment
+
+    def get_vertex_brkline(self):
+        # строим ломаную (BRoKen LINE) из вершин фракций и моментов в порядке прохождения
+        vm = self.get_vertex_moments()
+        
+        # ломаная для самой кривой
+        brkline = [(v,vm[v]) for v in sorted(vm.keys(), key=lambda x:vm[x])]
+        
+        # локаная для кривой с обращенным временем
+        brkline_rev = [(v,1-t) for v,t in reversed(brkline)]  # моменты при прохождении обратной кривой
+        result = []
+        for cnum, cube, base_map in zip(range(self.genus()), self.proto, self.base_maps):
+            if base_map.time_rev:
+                curr_brkline = brkline_rev
+            else:
+                curr_brkline = brkline
+            for v,t in curr_brkline:
+                # есть вершина и момент
+                # сначала поворачиваем, потом переносим во фракцию
+                bv = base_map.apply_x(v)
+                real_bv = [Fraction(cube[j] + bv[j], self.div) for j in range(self.dim)]
+                real_t = Fraction(cnum + t, self.genus())
+                result.append((real_bv, real_t))
+
+        # удаляем дублирующиеся точки перехода
+        new_result = []
+        for i, r in enumerate(result):
+            if i >= 1 and r == result[i-1]:
+                # точка перехода
+                continue
+            new_result.append(r)
+        assert len(new_result) == self.genus() * (2**self.dim-1) + 1
+        return result
 
     def get_edge_touch(self, edge):
         """Find moment of first edge touch.
@@ -251,7 +305,6 @@ class FractalCurve:
 
         return t0 + tp
 
-
     def check(self):
         """Check consistency of curve params."""
         d = self.dim
@@ -271,8 +324,7 @@ class FractalCurve:
         curve_exit = self.get_exit()
 
         # проверяем соответствие входов-выходов
-        gates = []  # пары (вход,выход)
-        gates.append((None, curve_entrance))
+        gates = [(None, curve_entrance)]  # пары (вход,выход)
 
         for cube, bm in zip(self.proto, self.base_maps):
             entrance_rel = bm.apply_x(curve_entrance)
@@ -288,7 +340,6 @@ class FractalCurve:
 
         for i in range(len(gates)-1):
             assert gates[i][1] == gates[i+1][0], 'exit does not correspond to entrance'
-
 
     #
     # Стыки. Реализовано для кривых без обращения времени
@@ -328,7 +379,40 @@ class FractalCurve:
     @staticmethod
     def _get_std_junction(delta, bm1, bm2):
         bm1_inv = bm1.inverse()
-        return (bm1_inv.apply_vec(delta), bm1_inv * bm2)
+        return bm1_inv.apply_vec(delta), bm1_inv * bm2
+
+    #
+    # Показатели гладкости кривой
+    #
+
+    def get_junc_reduced_ratio(self, junction, k, dist):
+        delta, base_map = junction
+        next_curve = self.apply_base_map(base_map)
+        self_brkline = self.get_subdivision(k).get_vertex_brkline()
+        next_brkline = next_curve.get_subdivision(k).get_vertex_brkline()
+
+        max_ratio = -1
+        d = self.dim
+        t1_max = 1-Fraction(1, self.genus())
+        t2_min = Fraction(1, self.genus())
+        test_quads = []  # тестовые четверки (v1,t1,v2,t2)
+        for v1, t1 in self_brkline:
+            for v2, t2 in next_brkline:
+                if t1 > t1_max or t2 < t2_min:
+                    continue
+                t1_real = t1
+                t2_real = t2 + 1
+                v1_real = v1
+                v2_real = tuple(v2[j] + delta[j] for j in range(d))
+                ratio = Fraction(dist(v1_real, v2_real)**d, t2_real-t1_real)
+                if ratio > max_ratio:
+                    max_ratio = ratio
+        return max_ratio
+
+
+
+
+
 
 
 # some utility functions
