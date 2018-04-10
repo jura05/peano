@@ -1,9 +1,9 @@
 # coding: utf-8
 
 from fractions import Fraction
+from math import gcd
 
 from base_map import BaseMap
-
 
 class FractalCurve:
     """Class representing fractal peano curve in [0,1]^d.
@@ -391,28 +391,47 @@ class FractalCurve:
         self_brkline = self.get_subdivision(k).get_vertex_brkline()
         next_brkline = next_curve.get_subdivision(k).get_vertex_brkline()
 
-        max_ratio = -1
         d = self.dim
-        t1_max = 1-Fraction(1, self.genus())
-        t2_min = Fraction(1, self.genus())
-        test_quads = []  # тестовые четверки (v1,t1,v2,t2)
-        for v1, t1 in self_brkline:
-            for v2, t2 in next_brkline:
-                if t1 > t1_max or t2 < t2_min:
+
+        # переведём все дроби в int
+        def get_lcm(a, b):
+            return a * b // gcd(a, b)
+        lcm = 1
+        for v,t in self_brkline:
+            lcm = get_lcm(lcm, t.denominator)
+            for vj in v:
+                lcm = get_lcm(lcm, vj.denominator)
+        lcm = get_lcm(lcm, self.genus())  # для t1_max, t2_min
+
+        self_brkline_int = []
+        for v, t in self_brkline:
+            v_int = tuple(int(vj * lcm) for vj in v)
+            t_int = int(t * lcm**d)
+            self_brkline_int.append((v_int, t_int))
+
+        next_brkline_int = []
+        for v, t in next_brkline:
+            v_int = tuple(int(vj * lcm) for vj in v)
+            t_int = int(t * lcm**d)
+            next_brkline_int.append((v_int, t_int))
+
+        worst_dv = None
+        worst_dt = None
+        t1_max = int((1-Fraction(1, self.genus())) * lcm**d)
+        t2_min = int(Fraction(1, self.genus()) * lcm**d)
+        for v2, t2 in next_brkline_int:
+            t2_real = t2 + lcm ** d
+            v2_real = tuple(v2[j] + delta[j] * lcm for j in range(d))
+            for v1, t1 in self_brkline_int:
+                if t1 > t1_max and t2 < t2_min:
                     continue
-                t1_real = t1
-                t2_real = t2 + 1
-                v1_real = v1
-                v2_real = tuple(v2[j] + delta[j] for j in range(d))
-                ratio = Fraction(dist(v1_real, v2_real)**d, t2_real-t1_real)
-                if ratio > max_ratio:
-                    max_ratio = ratio
-        return max_ratio
+                dv = dist(v1, v2_real)**d
+                dt = t2_real - t1
+                if worst_dv is None or dv * worst_dt > worst_dv * dt:
+                    worst_dv = dv
+                    worst_dt = dt
 
-
-
-
-
+        return Fraction(worst_dv, worst_dt)
 
 
 # some utility functions
