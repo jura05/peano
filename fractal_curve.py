@@ -385,54 +385,142 @@ class FractalCurve:
     # Показатели гладкости кривой
     #
 
-    def get_junc_reduced_ratio(self, junction, k, dist):
+    def get_junc_reduced_ratio(self, junction, k, dist, t_pow=1):
+        """Get reduced ratio for a junction of a curve.
+        Params:
+            junction    subj
+            k           subdivision number
+            dist        pairwise distance function
+            t_pow       if dist return power of distance (t_pow=2 for squared l_2).
+        Returns dict with keys:
+            ratio       maximal ratio
+            v1,t1       vertex and time in curve
+            v2,t2       vertex and time in next curve (relative)
+        """
         delta, base_map = junction
         next_curve = self.apply_base_map(base_map)
         self_brkline = self.get_subdivision(k).get_vertex_brkline()
         next_brkline = next_curve.get_subdivision(k).get_vertex_brkline()
 
         d = self.dim
+        G = self.genus()
 
         # переведём все дроби в int
-        def get_lcm(a, b):
-            return a * b // gcd(a, b)
-        lcm = 1
+        denoms = []
         for v,t in self_brkline:
-            lcm = get_lcm(lcm, t.denominator)
-            for vj in v:
-                lcm = get_lcm(lcm, vj.denominator)
-        lcm = get_lcm(lcm, self.genus())  # для t1_max, t2_min
+            denoms.append(t.denominator)
+            denoms += [vj.denominator for vj in v]
+        denoms.append(G)  # для t1_max, t2_min
+
+        mul_x = get_lcm(denoms)  # растягиваем расстояния
+        mul_t = mul_x**d         # растягиваем время
 
         self_brkline_int = []
         for v, t in self_brkline:
-            v_int = tuple(int(vj * lcm) for vj in v)
-            t_int = int(t * lcm**d)
+            v_int = tuple(int(vj * mul_x) for vj in v)
+            t_int = int(t * mul_t)
             self_brkline_int.append((v_int, t_int))
 
         next_brkline_int = []
         for v, t in next_brkline:
-            v_int = tuple(int(vj * lcm) for vj in v)
-            t_int = int(t * lcm**d)
+            v_int = tuple(int(vj * mul_x) for vj in v)
+            t_int = int(t * mul_t)
             next_brkline_int.append((v_int, t_int))
 
         worst_dv = None
         worst_dt = None
-        t1_max = int((1-Fraction(1, self.genus())) * lcm**d)
-        t2_min = int(Fraction(1, self.genus()) * lcm**d)
+        t1_max = int(mul_t - mul_t // G)  # последняя фракция кривой
+        t2_min = int(mul_t // G)      # первая фракция соседа
         for v2, t2 in next_brkline_int:
-            t2_real = t2 + lcm ** d
-            v2_real = tuple(v2[j] + delta[j] * lcm for j in range(d))
+            # v2,t2 - относительно второй фракции, переводим в общую систему координат
+            t2_real = t2 + mul_t
+            v2_real = tuple(v2[j] + delta[j] * mul_x for j in range(d))
             for v1, t1 in self_brkline_int:
                 if t1 > t1_max and t2 < t2_min:
                     continue
                 dv = dist(v1, v2_real)**d
-                dt = t2_real - t1
+                dt = (t2_real - t1)**t_pow
+                # Fraction медленно работает, приходится сравнивать Fraction(dv,dt) вручную :(
                 if worst_dv is None or dv * worst_dt > worst_dv * dt:
                     worst_dv = dv
                     worst_dt = dt
+                    worst_quad = (v1,t1,v2,t2)
 
-        return Fraction(worst_dv, worst_dt)
+        return  {
+            'ratio': Fraction(worst_dv, worst_dt),
+            'v1': tuple(Fraction(vj, mul_x) for vj in worst_quad[0]),
+            't1': Fraction(worst_quad[1], mul_t),
+            'v2': tuple(Fraction(vj, mul_x) for vj in worst_quad[2]),
+            't2': Fraction(worst_quad[3], mul_t),
+        }
 
+
+    def get_reduced_ratio(self, k, dist, t_pow=1):
+        """See get_junc_reduced_ratio."""
+        self_brkline = self.get_subdivision(k).get_vertex_brkline()
+        d = self.dim
+        G = self.genus()
+
+        # переведём все дроби в int
+        denoms = []
+        for v,t in self_brkline:
+            denoms.append(t.denominator)
+            denoms += [vj.denominator for vj in v]
+        denoms.append(G)  # для различия фракций
+
+        mul_x = get_lcm(denoms)  # растягиваем расстояния
+        mul_t = mul_x**d         # растягиваем время
+
+        brkline_inf = []
+        for v, t in self_brkline:
+            v_int = tuple(int(vj * mul_x) for vj in v)
+            t_int = int(t * mul_t)
+            brkline_inf.append((v_int, t_int))
+
+        worst_dv = None
+        worst_dt = None
+        for j1 in range(len(brkline_inf)):
+            v1, t1 = brkline_inf[j1]
+            for j2 in range(j1+1, len(brkline_inf)):
+                v2, t2 = brkline_inf[j2]
+                # не берём, если они в одной или соседних фракциях
+                if (G*t2 // mul_t) - (G*t1 // mul_t) <= 1:
+                    continue
+                dv = dist(v1, v2)**d
+                dt = (t2 - t1)**t_pow
+                if worst_dv is None or dv * worst_dt > worst_dv * dt:
+                    worst_dv = dv
+                    worst_dt = dt
+                    worst_quad = (v1,t1,v2,t2)
+
+        return  {
+            'ratio': Fraction(worst_dv, worst_dt),
+            'v1': tuple(Fraction(vj, mul_x) for vj in worst_quad[0]),
+            't1': Fraction(worst_quad[1], mul_t),
+            'v2': tuple(Fraction(vj, mul_x) for vj in worst_quad[2]),
+            't2': Fraction(worst_quad[3], mul_t)
+        }
+
+    def get_approx_ratio(self, k, dist, t_pow=1):
+        """Get approximate ratio of a curve using its and it's junks reduced ratios."""
+        max_ratio_inf = self.get_reduced_ratio(k, dist, t_pow)
+        max_ratio_inf['type'] = 'curve'
+        for junc in self.get_junctions():
+            junc_ratio_inf = self.get_junc_reduced_ratio(junc, k, dist, t_pow)
+            junc_ratio_inf['type'] = 'junc'
+            junc_ratio_inf['junc'] = junc
+            if junc_ratio_inf['ratio'] > max_ratio_inf['ratio']:
+                max_ratio_inf = junc_ratio_inf
+        return max_ratio_inf
+
+
+
+def get_lcm(iterable):
+    """Least common multiple of integer sequence."""
+    lcm = 1
+    for x in iterable:
+        lcm = (lcm * x) // gcd(lcm, x)
+    return lcm
 
 # some utility functions
 def _chain2proto(dim, chain_code, start=None):
