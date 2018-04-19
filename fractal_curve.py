@@ -2,6 +2,7 @@
 
 from fractions import Fraction
 from math import gcd
+from collections import Counter
 
 from base_map import BaseMap
 
@@ -385,133 +386,214 @@ class FractalCurve:
     # Показатели гладкости кривой
     #
 
-    def get_junc_reduced_ratio(self, junction, k, dist, t_pow=1):
-        """Get reduced ratio for a junction of a curve.
+    def divide_piece(self, piece):
+        G = self.genus()
+        d = self.dim
+        N = self.div
+        new_pieces = []
+        piece_curve = self.apply_base_map(piece.base_map)
+        for cnum, cube, base_map in zip(range(G), piece_curve.proto, piece_curve.base_maps):
+            new_piece = CurvePiece(
+                cnum=piece.cnum * G + cnum,
+                cube=tuple(piece.cube[j] * N + cube[j] for j in range(d)),
+                base_map=base_map * piece.base_map,
+                subdivision=piece.subdivision + 1,
+            )
+            new_pieces.append(new_piece)
+        return new_pieces
+
+    def estimate_ratio(self, ratio_func, junctions=None, upper_bound=None, max_iter=None, rel_tol=None, verbose=0):
+        """Estimate ratio of a curve for given junctions.
         Params:
-            junction    subj
-            k           subdivision number
-            dist        pairwise distance function
-            t_pow       if dist return power of distance (t_pow=2 for squared l_2).
+            ratio_func      generic function for ratio; args: d, delta_v, delta_t
+            junction        junction (or None, for self reduced ratio)
+            upper_bound     apriori upper bound for ratio; we stop if higher ratio is found
+            max_iter        subj
+            rel_tol         relative error tolerance
+            verbose         print every iteration
         Returns dict with keys:
-            ratio       maximal ratio
-            v1,t1       vertex and time in curve
-            v2,t2       vertex and time in next curve (relative)
+            lower_bound     bounds for ratio
+            upper_bound
+            argmax          quad [v1,t1,v2,t2] with maximum ratio
+            stats           counter with some statistics
         """
-        delta, base_map = junction
-        next_curve = self.apply_base_map(base_map)
-        self_brkline = self.get_subdivision(k).get_vertex_brkline()
-        next_brkline = next_curve.get_subdivision(k).get_vertex_brkline()
+
+        # Алгоритм работы:
+        # сравниваем пары фракций:
+        # 1) оцениваем отношение снизу (через вершины, например)
+        # если отношение больше текущей верхней оценки - выходим
+        # 2) оцениваем отношение сверху (по прототипу)
+        # - если меньше текущей нижней оценки - останавливаемся, не подразбиваем
+        # - иначе, подразбиваем обе фракции
+
+        if any(bm.time_rev for bm in self.base_maps):
+            raise Exception("Not implemented for curves with time reversal!")
+        if max_iter is None and rel_tol is None:
+            raise Exception("Define max_iter or rel_tol!")
+
+        if junctions is None:
+            junctions = self.get_junctions()
+            junctions.add(None)
 
         d = self.dim
+        N = self.div
         G = self.genus()
 
-        # переведём все дроби в int
-        denoms = []
-        for v,t in self_brkline:
-            denoms.append(t.denominator)
-            denoms += [vj.denominator for vj in v]
-        denoms.append(G)  # для t1_max, t2_min
+        self_brkline = self.get_vertex_brkline()
 
-        mul_x = get_lcm(denoms)  # растягиваем расстояния
-        mul_t = mul_x**d         # растягиваем время
+        junc2inf = {}
+        piece_pairs = []
+        for junc in junctions:
+            if junc is None:
+                delta_x = (0,) * d
+                delta_t = 0
+                next_curve = self
+            else:
+                delta_x, junc_base_map = junc
+                delta_t = 1
+                next_curve = self.apply_base_map(junc_base_map)
 
-        self_brkline_int = []
-        for v, t in self_brkline:
-            v_int = tuple(int(vj * mul_x) for vj in v)
-            t_int = int(t * mul_t)
-            self_brkline_int.append((v_int, t_int))
+            argmax = None
+            stats = Counter()
+            curr_lower_bound = 0
 
-        next_brkline_int = []
-        for v, t in next_brkline:
-            v_int = tuple(int(vj * mul_x) for vj in v)
-            t_int = int(t * mul_t)
-            next_brkline_int.append((v_int, t_int))
+            # считаем максимально возможное редуцированное отношение
+            max_dv = tuple(1 + abs(delta_x[j]) for j in range(d))
+            min_dt = Fraction(1, G)
+            curr_upper_bound = ratio_func(d, max_dv, min_dt)
 
-        worst_dv = None
-        worst_dt = None
-        t1_max = int(mul_t - mul_t // G)  # последняя фракция кривой
-        t2_min = int(mul_t // G)      # первая фракция соседа
-        for v2, t2 in next_brkline_int:
-            # v2,t2 - относительно второй фракции, переводим в общую систему координат
-            t2_real = t2 + mul_t
-            v2_real = tuple(v2[j] + delta[j] * mul_x for j in range(d))
-            for v1, t1 in self_brkline_int:
-                if t1 > t1_max and t2 < t2_min:
-                    continue
-                dv = dist(v1, v2_real)**d
-                dt = (t2_real - t1)**t_pow
-                # Fraction медленно работает, приходится сравнивать Fraction(dv,dt) вручную :(
-                if worst_dv is None or dv * worst_dt > worst_dv * dt:
-                    worst_dv = dv
-                    worst_dt = dt
-                    worst_quad = (v1,t1,v2,t2)
+            # базовые ломаные -- можно их брать и по-другому...
+            next_brkline = next_curve.get_vertex_brkline()
 
-        return  {
-            'ratio': Fraction(worst_dv, worst_dt),
-            'v1': tuple(Fraction(vj, mul_x) for vj in worst_quad[0]),
-            't1': Fraction(worst_quad[1], mul_t),
-            'v2': tuple(Fraction(vj, mul_x) for vj in worst_quad[2]),
-            't2': Fraction(worst_quad[3], mul_t),
+            junc2inf[junc] = {
+                'next_curve': next_curve,
+                'next_brkline': next_brkline,
+                'delta_x': delta_x,
+                'delta_t': delta_t,
+            }
+
+            for cnum1, cube1, base_map1 in zip(range(G), self.proto, self.base_maps):
+                for cnum2, cube2, base_map2 in zip(range(G), next_curve.proto, next_curve.base_maps):
+                    if cnum2 + delta_t*G <= cnum1 + 1:
+                        # соседние фракции, попадает в производный стык!
+                        continue
+                    piece1 = CurvePiece(subdivision=1, cnum=cnum1, cube=cube1, base_map=base_map1)
+                    piece2 = CurvePiece(subdivision=1, cnum=cnum2, cube=cube2, base_map=base_map2)
+                    piece_pairs.append((junc, piece1, piece2, curr_upper_bound))
+
+        # отображаем базовую ломаную на фракцию
+        def brkline_for_piece(brkline, piece):
+            mx = Fraction(1, N**piece.subdivision)
+            mt = Fraction(1, G**piece.subdivision)
+            new_brkline = []
+            for v, t in brkline:
+                # сначала применяем базовое преобразование, потом проектируем в куб
+                new_v = piece.base_map.apply_x(v)
+                new_v = tuple((piece.cube[j] + new_v[j]) * mx for j in range(d))
+                new_t = (piece.cnum + t) * mt
+                new_brkline.append((new_v, new_t))
+            return new_brkline
+
+        while piece_pairs:
+            stats['iter'] += 1
+            if max_iter is not None and stats['iter'] >= max_iter:
+                break
+
+            junc, piece1, piece2, _ = piece_pairs.pop(0)
+            junc_inf = junc2inf[junc]
+            delta_x = junc_inf['delta_x']
+            delta_t = junc_inf['delta_t']
+
+            stats['max_subdivision'] = max(stats['max_subdivision'], piece1.subdivision, piece2.subdivision)
+
+            if verbose:
+                print('iter: {}; stop: {}, max_subdivision: {}; ratio: {} <= X <= {}'.format(
+                    stats['iter'],
+                    stats['stop_divide'],
+                    stats['max_subdivision'],
+                    float(curr_lower_bound),
+                    float(curr_upper_bound),
+                ))
+
+            #
+            # Обновим верхнюю границу (curr_upper_bound)
+            #
+            # нужно найти максимальное расстояние между точками двух кубов
+            # здесь мы предполагаем, что ratio_func зависит лишь от абсолютных величин dv и d-однородна
+            # т.к. stop_divide очень частый, то нужно ускорить -- приводим к целым числам
+            if piece1.subdivision == piece2.subdivision:
+                mx2, mt2 = 1, 1
+            else: # .. = .. + 1
+                mx2, mt2 = N, G
+            mx = N**piece1.subdivision
+            mt = G**piece1.subdivision
+            max_dv = []
+            for j in range(d):
+                c1 = piece1.cube[j]
+                c2 = delta_x[j] * mx + piece2.cube[j] * mx2
+                max_diff = max(abs(c1 + 1 - c2), abs(c1 - (c2 + mx2)))
+                max_dv.append(max_diff)
+            min_dt = delta_t * mt + piece2.cnum * mt2  - (piece1.cnum + 1)
+            up_ratio = ratio_func(d, max_dv, min_dt)
+
+            curr_upper_bound = max([up_ratio] + [h[-1] for h in piece_pairs])
+
+            if up_ratio <= curr_lower_bound:
+                # нам эта пара больше не интересна!
+                stats['stop_divide'] += 1
+                continue
+
+            #
+            # Обновим нижнюю оценку (curr_lower_bound)
+            #
+            brkline1 = brkline_for_piece(self_brkline, piece1)
+            brkline2 = brkline_for_piece(junc_inf['next_brkline'], piece2)
+            for v1, t1 in brkline1:
+                for v2, t2 in brkline2:
+                    dv = tuple(v2[j] + delta_x[j] - v1[j] for j in range(d))
+                    dt = t2 + delta_t - t1
+                    ratio = ratio_func(d, dv, dt)
+                    if ratio > curr_lower_bound:
+                        curr_lower_bound = ratio
+                        argmax = [v1,t1,v2,t2,junc]
+
+            if upper_bound is not None and curr_lower_bound > upper_bound:
+                break
+
+            if rel_tol is not None and curr_upper_bound <= (1 + rel_tol) * curr_lower_bound:
+                break
+
+            if piece1.subdivision <= piece2.subdivision:
+                for s1 in self.divide_piece(piece1):
+                    piece_pairs.append((junc, s1, piece2, up_ratio))
+            else:
+                for s2 in junc_inf['next_curve'].divide_piece(piece2):
+                    piece_pairs.append((junc, piece1, s2, up_ratio))
+
+        return {
+            'lower_bound': curr_lower_bound,
+            'upper_bound': curr_upper_bound,
+            'argmax': argmax,
+            'stats': stats,
         }
 
 
-    def get_reduced_ratio(self, k, dist, t_pow=1):
-        """See get_junc_reduced_ratio."""
-        self_brkline = self.get_subdivision(k).get_vertex_brkline()
-        d = self.dim
-        G = self.genus()
+class CurvePiece:
+    """Fraction of a curve."""
 
-        # переведём все дроби в int
-        denoms = []
-        for v,t in self_brkline:
-            denoms.append(t.denominator)
-            denoms += [vj.denominator for vj in v]
-        denoms.append(G)  # для различия фракций
-
-        mul_x = get_lcm(denoms)  # растягиваем расстояния
-        mul_t = mul_x**d         # растягиваем время
-
-        brkline_inf = []
-        for v, t in self_brkline:
-            v_int = tuple(int(vj * mul_x) for vj in v)
-            t_int = int(t * mul_t)
-            brkline_inf.append((v_int, t_int))
-
-        worst_dv = None
-        worst_dt = None
-        for j1 in range(len(brkline_inf)):
-            v1, t1 = brkline_inf[j1]
-            for j2 in range(j1+1, len(brkline_inf)):
-                v2, t2 = brkline_inf[j2]
-                # не берём, если они в одной или соседних фракциях
-                if (G*t2 // mul_t) - (G*t1 // mul_t) <= 1:
-                    continue
-                dv = dist(v1, v2)**d
-                dt = (t2 - t1)**t_pow
-                if worst_dv is None or dv * worst_dt > worst_dv * dt:
-                    worst_dv = dv
-                    worst_dt = dt
-                    worst_quad = (v1,t1,v2,t2)
-
-        return  {
-            'ratio': Fraction(worst_dv, worst_dt),
-            'v1': tuple(Fraction(vj, mul_x) for vj in worst_quad[0]),
-            't1': Fraction(worst_quad[1], mul_t),
-            'v2': tuple(Fraction(vj, mul_x) for vj in worst_quad[2]),
-            't2': Fraction(worst_quad[3], mul_t)
-        }
-
-    def get_approx_ratio(self, k, dist, t_pow=1):
-        """Get approximate ratio of a curve using its and it's junks reduced ratios."""
-        max_ratio_inf = self.get_reduced_ratio(k, dist, t_pow)
-        max_ratio_inf['type'] = 'curve'
-        for junc in self.get_junctions():
-            junc_ratio_inf = self.get_junc_reduced_ratio(junc, k, dist, t_pow)
-            junc_ratio_inf['type'] = 'junc'
-            junc_ratio_inf['junc'] = junc
-            if junc_ratio_inf['ratio'] > max_ratio_inf['ratio']:
-                max_ratio_inf = junc_ratio_inf
-        return max_ratio_inf
+    def __init__(self, subdivision, base_map, cnum, cube):
+        """Params:
+        subdivision     whole curve: 0, basic fractions: 1, etc
+        base_map        subj
+        cnum            subj
+        cube            subj
+        """
+        self.subdivision = subdivision
+        if base_map.time_rev:
+            raise Exception("Time reversal not supported in CurvePiece")
+        self.base_map = base_map
+        self.cnum = cnum
+        self.cube = cube
 
 
 
