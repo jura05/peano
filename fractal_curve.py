@@ -12,8 +12,6 @@ class FractalCurve:
         div         positive integer, number of divisions of each side of the cube (characteristic of a curve)
         dim         dimension
         proto       curve prototype - sequence of "cubes" with integer coordinates (x_0,..,x_{d-1}), 0<=x_j<div
-          or
-        chain_code  'ikjKJ'
         base_maps   sequence of base maps (instances of BaseMap class)
 
     Immutable, hashable.
@@ -24,12 +22,9 @@ class FractalCurve:
     # cube -- куб из прототипа
     # cnum -- номер куба в прототипе
 
-    def __init__(self, dim, div, base_maps, proto=None, chain_code=None):
+    def __init__(self, dim, div, proto, base_maps):
         self.dim = dim
         self.div = div
-        if chain_code is not None:
-            proto = _chain2proto(dim, chain_code)
-
         self.proto = tuple(tuple(cube) for cube in proto)
         self.base_maps = tuple(base_maps)
 
@@ -604,27 +599,3 @@ def get_lcm(iterable):
         lcm = (lcm * x) // gcd(lcm, x)
     return lcm
 
-# some utility functions
-def _chain2proto(dim, chain_code, start=None):
-    """Convert chain code like 'ijK' to curve prototype."""
-    assert dim <= 6
-    letters = 'ijklmn'
-    l2v = {}
-    for k in range(dim):
-        l = letters[k]
-        v = [0] * dim
-        v[k] = 1
-        l2v[l] = v
-        l2v[l.upper()] = [-x for x in v]
-
-    if start is None:
-        start = (0,) * dim
-
-    cube = start
-    proto = [cube]
-    for l in chain_code:
-        diff = l2v[l]
-        cube = [c + d for c, d in zip(cube, diff)]
-        proto.append(cube)
-
-    return proto

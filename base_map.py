@@ -6,7 +6,7 @@ class BaseMap:
     Acts on function f:[0,1]->[0,1]^d as  Bf: [0,1]--B_t-->[0,1]--f-->[0,1]^d--B_x-->[0,1]^d
     """
 
-    def __init__(self, perm=None, flip=None, time_rev=False, dim=None, basis=None):
+    def __init__(self, perm=None, flip=None, dim=None, time_rev=False):
         """Create a BaseMap instance.
         Params:
         perm, flip: params, which define isometry of cube
@@ -16,16 +16,14 @@ class BaseMap:
                       (x_0,...,x_{d-1}) --> (f(b_0;x_{k_0}), ..., f(b_{d-1};x_{k_{d-1}})),
                       where f(b;x)=x if b is False, and 1-x otherwise
           or
-        basis:      'ijK'
-          or
         dim:        dimension only (defines identity map)
 
         time_rev:   time reversal (boolean), default: False
         """
 
-        if basis is not None:
-            perm, flip = _parse_basis(basis)
-        if dim is not None:
+        if perm is None or flip is None:
+            if dim is None:
+                raise Exception("Can't init base_map: define perm, flip")
             perm = list(range(dim))
             flip = [False]*dim
 
@@ -102,18 +100,3 @@ class BaseMap:
         """Apply isometry to an edge. Not implemented!"""
         pass
 
-def _parse_basis(basis):
-    dim = len(basis)
-    letters = 'ijklmn'
-    assert dim <= 6
-
-    l2i = {l: i for i, l in enumerate(letters)}
-    perm = [None]*dim
-    flip = [None]*dim
-
-    for k, l in enumerate(basis):
-        lk = l.lower()
-        perm[k] = l2i[lk]
-        flip[k] = (l != lk)
-    
-    return perm, flip

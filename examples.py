@@ -2,6 +2,7 @@
 
 from fractal_curve import FractalCurve
 from base_map import BaseMap
+from utils import chain2proto, basis2base_map
 
 
 # some examples of curves
@@ -43,8 +44,8 @@ def get_tokarev_curve():
     bases = ['jki', 'kij', 'kij', 'iJK', 'iJK', 'KIj', 'KIj', 'JkI']
     return FractalCurve(
         dim=dim, div=2,
-        chain_code=chain_code,
-        base_maps=[BaseMap(basis=b) for b in bases],
+        proto=chain2proto(dim, chain_code),
+        base_maps=[basis2base_map(b) for b in bases],
     )
 
 
