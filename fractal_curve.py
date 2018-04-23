@@ -436,6 +436,11 @@ class FractalCurve:
 
         self_brkline = self.get_vertex_brkline()
 
+        argmax = None
+        stats = Counter()
+        curr_lower_bound = 0
+        curr_upper_bound = None
+
         junc2inf = {}
         piece_pairs = []
         for junc in junctions:
@@ -448,14 +453,10 @@ class FractalCurve:
                 delta_t = 1
                 next_curve = self.apply_base_map(junc_base_map)
 
-            argmax = None
-            stats = Counter()
-            curr_lower_bound = 0
-
             # считаем максимально возможное редуцированное отношение
             max_dv = tuple(1 + abs(delta_x[j]) for j in range(d))
             min_dt = Fraction(1, G)
-            curr_upper_bound = ratio_func(d, max_dv, min_dt)
+            dummy_upper_bound = ratio_func(d, max_dv, min_dt)
 
             # базовые ломаные -- можно их брать и по-другому...
             next_brkline = next_curve.get_vertex_brkline()
@@ -474,7 +475,7 @@ class FractalCurve:
                         continue
                     piece1 = CurvePiece(subdivision=1, cnum=cnum1, cube=cube1, base_map=base_map1)
                     piece2 = CurvePiece(subdivision=1, cnum=cnum2, cube=cube2, base_map=base_map2)
-                    piece_pairs.append((junc, piece1, piece2, curr_upper_bound))
+                    piece_pairs.append((junc, piece1, piece2, dummy_upper_bound))
 
         # отображаем базовую ломаную на фракцию
         def brkline_for_piece(brkline, piece):
@@ -494,7 +495,7 @@ class FractalCurve:
             if max_iter is not None and stats['iter'] >= max_iter:
                 break
 
-            junc, piece1, piece2, _ = piece_pairs.pop(0)
+            junc, piece1, piece2, old_up_ratio = piece_pairs.pop(0)
             junc_inf = junc2inf[junc]
             delta_x = junc_inf['delta_x']
             delta_t = junc_inf['delta_t']
@@ -502,13 +503,17 @@ class FractalCurve:
             stats['max_subdivision'] = max(stats['max_subdivision'], piece1.subdivision, piece2.subdivision)
 
             if verbose:
-                print('iter: {}; stop: {}, max_subdivision: {}; ratio: {} <= X <= {}'.format(
+                print('iter: {}; max_subdivision: {}; ratio: {} <= X <= {}'.format(
                     stats['iter'],
-                    stats['stop_divide'],
                     stats['max_subdivision'],
                     float(curr_lower_bound),
-                    float(curr_upper_bound),
+                    (float(curr_upper_bound) if curr_upper_bound is not None else '?'),
                 ))
+
+            # могла обновиться нижняя оценка, и пара больше не актуальна!
+            if old_up_ratio <= curr_lower_bound:
+                stats['stop_early'] += 1
+                continue
 
             #
             # Обновим верхнюю границу (curr_upper_bound)
