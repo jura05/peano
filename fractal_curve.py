@@ -381,32 +381,30 @@ class FractalCurve:
     # Показатели гладкости кривой
     #
 
-    def divide_piece(self, piece):
-        G = self.genus()
-        d = self.dim
-        N = self.div
-        new_pieces = []
-        piece_curve = self.apply_base_map(piece.base_map)
-        for cnum, cube, base_map in zip(range(G), piece_curve.proto, piece_curve.base_maps):
-            new_piece = CurvePiece(
-                cnum=piece.cnum * G + cnum,
-                cube=tuple(piece.cube[j] * N + cube[j] for j in range(d)),
-                base_map=base_map * piece.base_map,
-                subdivision=piece.subdivision + 1,
-            )
-            new_pieces.append(new_piece)
-        return new_pieces
+    class CurveBalancedPair:
+        # работаем с парой фракций кривой
+        # первую приводим к стандартной ориентации (как для стыка)
+        # одна из фракций может быть "раздута" (не более чем на одно подразделение), другая - стандартная:
+        # compare=0:  первая фракция [0,1]^d, вторая: delta_x + [0,1]^d
+        # compare=-1: первая фракция [0,1]^d, вторая: delta_x + [0,N]^d
+        # compare=1:  первая фракция [0,N]^d, вторая: delta_x + [0,1]^d <--- сейчас не используется
+        def __init__(self, delta_x, delta_t, base_map, compare=0):
+            self.delta_x = delta_x
+            self.delta_t = delta_t  # время от начала первой фракции до начала второй (за 1 времени заметаем [0,1]^d)
+            self.base_map = base_map  # как повёрнута вторая фракция
+            self.compare = compare
 
-    def divide_pair(self, pair):
+    # подразбиваем одну из фракций в паре (pair - класса CurveBalancedPair)
+    def divide_pair(self, pair, use_second=False):
         d = self.dim
         N = self.div
         G = self.genus()
 
-        delta_x = pair['delta_x']
-        delta_t = pair['delta_t']
-        base_map = pair['base_map']
+        delta_x = pair.delta_x
+        delta_t = pair.delta_t
+        base_map = pair.base_map
         pairs = []
-        if pair['lx2'] == 1:
+        if (pair.compare == 0) and (not use_second):
             # делим стандартную фракцию, нужно раздуть всё и стандартизовать!
             for cnum, cube, bm in zip(range(G), self.proto, self.base_maps):
                 scaled_delta_x = tuple(delta_x[j] * N - cube[j] for j in range(d))
@@ -416,27 +414,56 @@ class FractalCurve:
                 inv_map = bm.inverse()
                 new_base_map = inv_map * base_map
                 new_delta_x  = inv_map.apply_cube_start(cube_start=scaled_delta_x, cube_length=N)
-                new_pair = {
-                    'delta_x': new_delta_x,
-                    'delta_t': scaled_delta_t,
-                    'base_map': new_base_map,
-                    'lx2': N,
-                    'max_subdivision': pair['max_subdivision'] + 1,
-                }
+                new_pair = self.CurveBalancedPair(
+                    delta_x=new_delta_x,
+                    delta_t=scaled_delta_t,
+                    base_map=new_base_map,
+                    compare=-1,
+                )
                 pairs.append(new_pair)
-        else:
-            # делим раздутую фракцию, стандартизовать не нужно!
+        elif (pair.compare == 0) and use_second:
+            # делим вторую фракцию, нужно только раздуть
+            # сейчас не используется!
             for cnum, cube, bm in zip(range(G), self.proto, self.base_maps):
                 new_cube = base_map.apply_cube(N, cube)
                 new_base_map = base_map * bm
-                new_pair = {
-                    'delta_x': tuple(delta_x[j] + new_cube[j] for j in range(d)),
-                    'delta_t': delta_t + cnum,
-                    'base_map': new_base_map,
-                    'lx2': 1,
-                    'max_subdivision': pair['max_subdivision'],
-                }
+                new_pair = self.CurveBalancedPair(
+                    delta_x=tuple(delta_x[j]*N + new_cube[j] for j in range(d)),
+                    delta_t=delta_t * G + cnum,
+                    base_map=new_base_map,
+                    compare=1,
+                )
                 pairs.append(new_pair)
+        elif pair.compare == -1:
+            # делим вторую, раздутую фракцию, стандартизовать не нужно!
+            for cnum, cube, bm in zip(range(G), self.proto, self.base_maps):
+                new_cube = base_map.apply_cube(N, cube)
+                new_base_map = base_map * bm
+                new_pair = self.CurveBalancedPair(
+                    delta_x=tuple(delta_x[j] + new_cube[j] for j in range(d)),
+                    delta_t=delta_t + cnum,
+                    base_map=new_base_map,
+                    compare=0,
+                )
+                pairs.append(new_pair)
+        elif pair.compare == 1:
+            # делим первую, раздутую фракцию, нужно только повернуть
+            for cnum, cube, bm in zip(range(G), self.proto, self.base_maps):
+                new_delta_x = tuple(delta_x[j] - cube[j] for j in range(d))
+                new_delta_t = delta_t - cnum
+
+                # применим inv_map, стандартизуя первую фракцию
+                inv_map = bm.inverse()
+                new_base_map = inv_map * base_map
+                new_delta_x  = inv_map.apply_cube_start(cube_start=new_delta_x, cube_length=1)
+                new_pair = self.CurveBalancedPair(
+                    delta_x=new_delta_x,
+                    delta_t=new_delta_t,
+                    base_map=new_base_map,
+                    compare=0,
+                )
+                pairs.append(new_pair)
+
         return pairs
 
     def estimate_ratio(self, ratio_func, junctions=None, upper_bound=None, max_iter=None, rel_tol=None, verbose=0):
@@ -477,15 +504,16 @@ class FractalCurve:
         N = self.div
         G = self.genus()
 
+        # тут можно использовать другие ломаные
         self_brkline = self.get_vertex_brkline()
+
+        # приводим ломаную к целым числам; множители lcm_x, lcm_t применим лишь в самом конце вычислений
         denoms = []
         for v, t in self_brkline:
             denoms.append(t.denominator)
             denoms += [x.denominator for x in v]
-        lcm = get_lcm(denoms)
-        lcm_x = lcm
+        lcm_x = get_lcm(denoms)
         lcm_t = lcm_x**d
-
         int_brkline = []
         for v, t in self_brkline:
             new_t = int(t * lcm_t)
@@ -496,7 +524,6 @@ class FractalCurve:
         stats = Counter()
         curr_lower_bound = 0
         curr_upper_bound = None
-
 
         pairs = []
         for junc in junctions:
@@ -513,22 +540,23 @@ class FractalCurve:
             min_dt = Fraction(1, G)
             dummy_upper_bound = ratio_func(d, max_dv, min_dt)
 
-            start_pair = {
-                'delta_x': delta_x,
-                'delta_t': delta_t,
-                'base_map': junc_base_map,
-                'lx2': 1,
-                'max_subdivision': 0,
-            }
-            
-            # делим два раза - обе части
+            start_pair = self.CurveBalancedPair(
+                delta_x=delta_x,
+                delta_t=delta_t,
+                base_map=junc_base_map,
+                compare=0,
+            )
+
+            # дробим каждую из частей (дробление только одной не уменьшает кол-во итераций)
+            junc_pairs = []
             for pair in self.divide_pair(start_pair):
                 for sub_pair in self.divide_pair(pair):
-                    if sub_pair['delta_t'] <= 1:
-                        # соседние фракции, попадает в производный стык!
+                    if sub_pair.delta_t <= 1:
                         continue
-                    sub_pair['upper_bound'] = dummy_upper_bound
-                    pairs.append(sub_pair)
+                    junc_pairs.append(sub_pair)
+
+            for pair in junc_pairs:
+                pairs.append({'pair': pair, 'upper_bound': dummy_upper_bound, 'max_subdivision': 1})
 
         seen_pairs = set()
         while pairs:
@@ -536,13 +564,22 @@ class FractalCurve:
             if max_iter is not None and stats['iter'] >= max_iter:
                 break
 
-            pair = pairs.pop(0)
-            delta_x = pair['delta_x']
-            delta_t = pair['delta_t']
-            base_map = pair['base_map']
-            lx2 = pair['lx2']
+            info = pairs.pop(0)
+            pair = info['pair']
+            delta_x = pair.delta_x
+            delta_t = pair.delta_t
+            base_map = pair.base_map
 
-            pair_position = (delta_x, delta_t, base_map, lx2)
+            # учитываем, что одна из фракций "раздута"
+            if pair.compare == 0:
+                mx1, mx2 = 1, 1
+            elif pair.compare == 1:
+                mx1, mx2 = N, 1
+            else:
+                mx1, mx2 = 1, N
+            mt1, mt2 = mx1**d, mx2**d
+
+            pair_position = (delta_x, delta_t, base_map, pair.compare)
             if pair_position in seen_pairs:
                 # пара уже встречалась, новых оценок нам не даст
                 stats['seen_pair'] += 1
@@ -550,7 +587,7 @@ class FractalCurve:
             else:
                 seen_pairs.add(pair_position)
 
-            stats['max_subdivision'] = max(stats['max_subdivision'], pair['max_subdivision'])
+            stats['max_subdivision'] = max(stats['max_subdivision'], info['max_subdivision'])
 
             if verbose:
                 print('iter: {}; max_subdivision: {}; ratio: {} <= X <= {}'.format(
@@ -561,18 +598,18 @@ class FractalCurve:
                 ))
 
             # могла обновиться нижняя оценка, и пара больше не актуальна!
-            if pair['upper_bound'] <= curr_lower_bound:
+            if info['upper_bound'] <= curr_lower_bound:
                 stats['stop_early'] += 1
                 continue
 
             #
             # Обновим верхнюю границу (curr_upper_bound)
             #
+
             # нужно найти максимальное расстояние между точками двух кубов
-            # т.к. stop_divide очень частый, то нужно ускорить -- приводим к целым числам
-            
-            max_dv = tuple(max(abs(1 - dx), abs(dx + lx2)) for dx in delta_x)
-            min_dt = delta_t - 1
+            # точки первого куба: 0 <= x[j] <= mx1, второго: delta_x[j] <= x[j] <= delta_x[j] + mx2
+            max_dv = tuple(max(abs(mx1 - dx), abs(dx + mx2)) for dx in delta_x)
+            min_dt = delta_t - mt1
             up_ratio = ratio_func(d, max_dv, min_dt)
 
             curr_upper_bound = max([up_ratio] + [h['upper_bound'] for h in pairs])
@@ -585,26 +622,38 @@ class FractalCurve:
             #
             # Обновим нижнюю оценку (curr_lower_bound)
             #
-            # поскольку приводили к целым числам, нужно всё умножить
 
-            brkline2 = []  # можно закешировать!
+            # поскольку приводили к целым числам, нужно всё умножить на lcm_x (соотв., lcm_t)
+            if mx1 == 1:
+                brkline1 = int_brkline
+            else:
+                brkline1 = []
+                for v, t in int_brkline:
+                    scaled_v = tuple(v[j] * mx1 for j in range(d))
+                    scaled_t = t * mt1
+                    brkline1.append((scaled_v, scaled_t))
+
+            brkline2 = []
             for v, t in int_brkline:
                 # повернуть + масштабировать
                 rot_v = base_map.apply_x2(v, lcm_x)
-                if lx2 != 1:
-                    scaled_v = tuple(rot_v[j] * lx2 for j in range(d))
-                    scaled_t = t * (lx2**d)
-                else:
+                if mx2 == 1:
                     scaled_v = rot_v
                     scaled_t = t
+                else:
+                    scaled_v = tuple(rot_v[j] * mx2 for j in range(d))
+                    scaled_t = t * mt2
                 brkline2.append((scaled_v, scaled_t))
 
+            # так как в ломаных уже "сидят" lcm-ы, умножаем только дельты
             scaled_delta_x = tuple(dx * lcm_x for dx in delta_x)
             scaled_delta_t = delta_t * lcm_t
-            for v1, t1 in int_brkline:
-                for v2, t2 in brkline2:
-                    dv = tuple(v2[j] + scaled_delta_x[j] - v1[j] for j in range(d))
-                    dt = t2 + scaled_delta_t - t1
+            for v2, t2 in brkline2:
+                v2_shifted = tuple(v2[j] + scaled_delta_x[j] for j in range(d))
+                t2_shifted = t2 + scaled_delta_t
+                for v1, t1 in brkline1:
+                    dv = tuple(v2_shifted[j] - v1[j] for j in range(d))
+                    dt = t2_shifted - t1
                     ratio = ratio_func(d, dv, dt)
                     if ratio > curr_lower_bound:
                         curr_lower_bound = ratio
@@ -617,8 +666,10 @@ class FractalCurve:
                 break
 
             for sub_pair in self.divide_pair(pair):
-                sub_pair['upper_bound'] = up_ratio
-                pairs.append(sub_pair)
+                max_subdivision = info['max_subdivision']
+                if pair.compare == 0:
+                    max_subdivision += 1  # если фракции были равны, номер подразбиения увеличился
+                pairs.append({'pair': sub_pair, 'upper_bound': up_ratio, 'max_subdivision': max_subdivision})
 
         return {
             'lower_bound': curr_lower_bound,
@@ -627,30 +678,9 @@ class FractalCurve:
             'stats': stats,
         }
 
-
-class CurvePiece:
-    """Fraction of a curve."""
-
-    def __init__(self, subdivision, base_map, cnum, cube):
-        """Params:
-        subdivision     whole curve: 0, basic fractions: 1, etc
-        base_map        subj
-        cnum            subj
-        cube            subj
-        """
-        self.subdivision = subdivision
-        if base_map.time_rev:
-            raise Exception("Time reversal not supported in CurvePiece")
-        self.base_map = base_map
-        self.cnum = cnum
-        self.cube = cube
-
-
-
 def get_lcm(iterable):
     """Least common multiple of integer sequence."""
     lcm = 1
     for x in iterable:
         lcm = (lcm * x) // gcd(lcm, x)
     return lcm
-
