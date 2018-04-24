@@ -401,6 +401,7 @@ class FractalCurve:
         """Estimate ratio of a curve for given junctions.
         Params:
             ratio_func      generic function for ratio; args: d, delta_v, delta_t
+                                we assume it is d-homogeneous
             junction        junction (or None, for self reduced ratio)
             upper_bound     apriori upper bound for ratio; we stop if higher ratio is found
             max_iter        subj
@@ -435,72 +436,116 @@ class FractalCurve:
         G = self.genus()
 
         self_brkline = self.get_vertex_brkline()
+        denoms = []
+        for v, t in self_brkline:
+            denoms.append(t.denominator)
+            denoms += [x.denominator for x in v]
+        lcm = get_lcm(denoms)
+        lcm_x = lcm
+        lcm_t = lcm_x**d
+
+        int_brkline = []
+        for v, t in self_brkline:
+            new_t = int(t * lcm_t)
+            new_v = tuple(int(x * lcm_x) for x in v)
+            int_brkline.append((new_v, new_t))
 
         argmax = None
         stats = Counter()
         curr_lower_bound = 0
         curr_upper_bound = None
 
-        junc2inf = {}
-        piece_pairs = []
+        def divide_pair(pair):
+            delta_x = pair['delta_x']
+            delta_t = pair['delta_t']
+            base_map = pair['base_map']
+            pairs = []
+            if pair['lx2'] == 1:
+                # делим стандартную фракцию, нужно раздуть всё и стандартизовать!
+                for cnum, cube, bm in zip(range(G), self.proto, self.base_maps):
+                    scaled_delta_x = tuple(delta_x[j] * N - cube[j] for j in range(d))
+                    scaled_delta_t = delta_t * G - cnum
+
+                    # применим inv_map, стандартизуя первую фракцию
+                    inv_map = bm.inverse()
+                    new_base_map = inv_map * base_map
+                    new_delta_x  = inv_map.apply_cube_start(cube_start=scaled_delta_x, cube_length=N)
+                    new_pair = {
+                        'delta_x': new_delta_x,
+                        'delta_t': scaled_delta_t,
+                        'base_map': new_base_map,
+                        'lx2': N,
+                        'max_subdivision': pair['max_subdivision'] + 1,
+                    }
+                    pairs.append(new_pair)
+            else:
+                # делим раздутую фракцию, стандартизовать не нужно!
+                for cnum, cube, bm in zip(range(G), self.proto, self.base_maps):
+                    new_cube = base_map.apply_cube(N, cube)
+                    new_base_map = base_map * bm
+                    new_pair = {
+                        'delta_x': tuple(delta_x[j] + new_cube[j] for j in range(d)),
+                        'delta_t': delta_t + cnum,
+                        'base_map': new_base_map,
+                        'lx2': 1,
+                        'max_subdivision': pair['max_subdivision'],
+                    }
+                    pairs.append(new_pair)
+            return pairs
+
+        pairs = []
         for junc in junctions:
             if junc is None:
                 delta_x = (0,) * d
                 delta_t = 0
-                next_curve = self
+                junc_base_map = BaseMap(dim=self.dim)
             else:
                 delta_x, junc_base_map = junc
                 delta_t = 1
-                next_curve = self.apply_base_map(junc_base_map)
 
             # считаем максимально возможное редуцированное отношение
             max_dv = tuple(1 + abs(delta_x[j]) for j in range(d))
             min_dt = Fraction(1, G)
             dummy_upper_bound = ratio_func(d, max_dv, min_dt)
 
-            # базовые ломаные -- можно их брать и по-другому...
-            next_brkline = next_curve.get_vertex_brkline()
-
-            junc2inf[junc] = {
-                'next_curve': next_curve,
-                'next_brkline': next_brkline,
+            start_pair = {
                 'delta_x': delta_x,
                 'delta_t': delta_t,
+                'base_map': junc_base_map,
+                'lx2': 1,
+                'max_subdivision': 0,
             }
-
-            for cnum1, cube1, base_map1 in zip(range(G), self.proto, self.base_maps):
-                for cnum2, cube2, base_map2 in zip(range(G), next_curve.proto, next_curve.base_maps):
-                    if cnum2 + delta_t*G <= cnum1 + 1:
+            
+            # делим два раза - обе части
+            for pair in divide_pair(start_pair):
+                for sub_pair in divide_pair(pair):
+                    if sub_pair['delta_t'] <= 1:
                         # соседние фракции, попадает в производный стык!
                         continue
-                    piece1 = CurvePiece(subdivision=1, cnum=cnum1, cube=cube1, base_map=base_map1)
-                    piece2 = CurvePiece(subdivision=1, cnum=cnum2, cube=cube2, base_map=base_map2)
-                    piece_pairs.append((junc, piece1, piece2, dummy_upper_bound))
+                    sub_pair['upper_bound'] = dummy_upper_bound
+                    pairs.append(sub_pair)
 
-        # отображаем базовую ломаную на фракцию
-        def brkline_for_piece(brkline, piece):
-            mx = Fraction(1, N**piece.subdivision)
-            mt = Fraction(1, G**piece.subdivision)
-            new_brkline = []
-            for v, t in brkline:
-                # сначала применяем базовое преобразование, потом проектируем в куб
-                new_v = piece.base_map.apply_x(v)
-                new_v = tuple((piece.cube[j] + new_v[j]) * mx for j in range(d))
-                new_t = (piece.cnum + t) * mt
-                new_brkline.append((new_v, new_t))
-            return new_brkline
-
-        while piece_pairs:
+        seen_pairs = set()
+        while pairs:
             stats['iter'] += 1
             if max_iter is not None and stats['iter'] >= max_iter:
                 break
 
-            junc, piece1, piece2, old_up_ratio = piece_pairs.pop(0)
-            junc_inf = junc2inf[junc]
-            delta_x = junc_inf['delta_x']
-            delta_t = junc_inf['delta_t']
+            pair = pairs.pop(0)
+            delta_x = pair['delta_x']
+            delta_t = pair['delta_t']
+            base_map = pair['base_map']
+            lx2 = pair['lx2']
 
-            stats['max_subdivision'] = max(stats['max_subdivision'], piece1.subdivision, piece2.subdivision)
+            pair_position = (delta_x, delta_t, base_map, lx2)
+            if pair_position in seen_pairs:
+                # пара уже встречалась, новых оценок нам не даст
+                stats['seen_pair'] += 1
+                continue
+            else:
+                seen_pairs.add(pair_position)
+
+            stats['max_subdivision'] = max(stats['max_subdivision'], pair['max_subdivision'])
 
             if verbose:
                 print('iter: {}; max_subdivision: {}; ratio: {} <= X <= {}'.format(
@@ -511,7 +556,7 @@ class FractalCurve:
                 ))
 
             # могла обновиться нижняя оценка, и пара больше не актуальна!
-            if old_up_ratio <= curr_lower_bound:
+            if pair['upper_bound'] <= curr_lower_bound:
                 stats['stop_early'] += 1
                 continue
 
@@ -519,24 +564,13 @@ class FractalCurve:
             # Обновим верхнюю границу (curr_upper_bound)
             #
             # нужно найти максимальное расстояние между точками двух кубов
-            # здесь мы предполагаем, что ratio_func зависит лишь от абсолютных величин dv и d-однородна
             # т.к. stop_divide очень частый, то нужно ускорить -- приводим к целым числам
-            if piece1.subdivision == piece2.subdivision:
-                mx2, mt2 = 1, 1
-            else: # .. = .. + 1
-                mx2, mt2 = N, G
-            mx = N**piece1.subdivision
-            mt = G**piece1.subdivision
-            max_dv = []
-            for j in range(d):
-                c1 = piece1.cube[j]
-                c2 = delta_x[j] * mx + piece2.cube[j] * mx2
-                max_diff = max(abs(c1 + 1 - c2), abs(c1 - (c2 + mx2)))
-                max_dv.append(max_diff)
-            min_dt = delta_t * mt + piece2.cnum * mt2  - (piece1.cnum + 1)
+            
+            max_dv = tuple(max(abs(1 - dx), abs(dx + lx2)) for dx in delta_x)
+            min_dt = delta_t - 1
             up_ratio = ratio_func(d, max_dv, min_dt)
 
-            curr_upper_bound = max([up_ratio] + [h[-1] for h in piece_pairs])
+            curr_upper_bound = max([up_ratio] + [h['upper_bound'] for h in pairs])
 
             if up_ratio <= curr_lower_bound:
                 # нам эта пара больше не интересна!
@@ -546,16 +580,28 @@ class FractalCurve:
             #
             # Обновим нижнюю оценку (curr_lower_bound)
             #
-            brkline1 = brkline_for_piece(self_brkline, piece1)
-            brkline2 = brkline_for_piece(junc_inf['next_brkline'], piece2)
-            for v1, t1 in brkline1:
+            # поскольку приводили к целым числам, нужно всё умножить
+
+            brkline2 = []  # можно закешировать!
+            for v, t in int_brkline:
+                # повернуть + масштабировать
+                rot_v = base_map.apply_x2(v, lcm_x)
+                if lx2 != 1:
+                    scaled_v = tuple(rot_v[j] * lx2 for j in range(d))
+                    scaled_t = t * (lx2**d)
+                else:
+                    scaled_v = rot_v
+                    scaled_t = t
+                brkline2.append((scaled_v, scaled_t))
+
+            for v1, t1 in int_brkline:
                 for v2, t2 in brkline2:
-                    dv = tuple(v2[j] + delta_x[j] - v1[j] for j in range(d))
-                    dt = t2 + delta_t - t1
+                    dv = tuple(v2[j] + delta_x[j]*lcm_x - v1[j] for j in range(d))
+                    dt = t2 + delta_t*lcm_t - t1
                     ratio = ratio_func(d, dv, dt)
                     if ratio > curr_lower_bound:
                         curr_lower_bound = ratio
-                        argmax = [v1,t1,v2,t2,junc]
+                        argmax = None  # todo: приводить v1,t1,v2,t2 к исходному виду, добавить junc
 
             if upper_bound is not None and curr_lower_bound > upper_bound:
                 break
@@ -563,12 +609,9 @@ class FractalCurve:
             if rel_tol is not None and curr_upper_bound <= (1 + rel_tol) * curr_lower_bound:
                 break
 
-            if piece1.subdivision <= piece2.subdivision:
-                for s1 in self.divide_piece(piece1):
-                    piece_pairs.append((junc, s1, piece2, up_ratio))
-            else:
-                for s2 in junc_inf['next_curve'].divide_piece(piece2):
-                    piece_pairs.append((junc, piece1, s2, up_ratio))
+            for sub_pair in divide_pair(pair):
+                sub_pair['upper_bound'] = up_ratio
+                pairs.append(sub_pair)
 
         return {
             'lower_bound': curr_lower_bound,

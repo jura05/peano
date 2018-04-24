@@ -88,6 +88,10 @@ class BaseMap:
         """Apply isometry to a point x of [0,1]^d."""
         return tuple(1-x[k] if b else x[k] for k, b in zip(self.perm, self.flip))
 
+    def apply_x2(self, x, l):
+        """Apply isometry to a point x of [0,l]^d."""
+        return tuple(l-x[k] if b else x[k] for k, b in zip(self.perm, self.flip))
+
     def apply_vec(self, v):
         """Apply linear part of isometry to a vector."""
         return tuple(-v[k] if b else v[k] for k, b in zip(self.perm, self.flip))
@@ -95,6 +99,10 @@ class BaseMap:
     def apply_cube(self, div, cube):
         """Apply isometry to a sub-cube."""
         return tuple(div-cube[k]-1 if b else cube[k] for k, b in zip(self.perm, self.flip))
+
+    def apply_cube_start(self, cube_start, cube_length):
+        """Apply isometry to a cube of given length, return it's min (start) vertex."""
+        return tuple(1-cube_start[k]-cube_length if b else cube_start[k] for k, b in zip(self.perm, self.flip))
 
     def apply_edge(self, edge):
         """Apply isometry to an edge. Not implemented!"""
