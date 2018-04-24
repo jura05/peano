@@ -397,6 +397,48 @@ class FractalCurve:
             new_pieces.append(new_piece)
         return new_pieces
 
+    def divide_pair(self, pair):
+        d = self.dim
+        N = self.div
+        G = self.genus()
+
+        delta_x = pair['delta_x']
+        delta_t = pair['delta_t']
+        base_map = pair['base_map']
+        pairs = []
+        if pair['lx2'] == 1:
+            # делим стандартную фракцию, нужно раздуть всё и стандартизовать!
+            for cnum, cube, bm in zip(range(G), self.proto, self.base_maps):
+                scaled_delta_x = tuple(delta_x[j] * N - cube[j] for j in range(d))
+                scaled_delta_t = delta_t * G - cnum
+
+                # применим inv_map, стандартизуя первую фракцию
+                inv_map = bm.inverse()
+                new_base_map = inv_map * base_map
+                new_delta_x  = inv_map.apply_cube_start(cube_start=scaled_delta_x, cube_length=N)
+                new_pair = {
+                    'delta_x': new_delta_x,
+                    'delta_t': scaled_delta_t,
+                    'base_map': new_base_map,
+                    'lx2': N,
+                    'max_subdivision': pair['max_subdivision'] + 1,
+                }
+                pairs.append(new_pair)
+        else:
+            # делим раздутую фракцию, стандартизовать не нужно!
+            for cnum, cube, bm in zip(range(G), self.proto, self.base_maps):
+                new_cube = base_map.apply_cube(N, cube)
+                new_base_map = base_map * bm
+                new_pair = {
+                    'delta_x': tuple(delta_x[j] + new_cube[j] for j in range(d)),
+                    'delta_t': delta_t + cnum,
+                    'base_map': new_base_map,
+                    'lx2': 1,
+                    'max_subdivision': pair['max_subdivision'],
+                }
+                pairs.append(new_pair)
+        return pairs
+
     def estimate_ratio(self, ratio_func, junctions=None, upper_bound=None, max_iter=None, rel_tol=None, verbose=0):
         """Estimate ratio of a curve for given junctions.
         Params:
@@ -455,43 +497,6 @@ class FractalCurve:
         curr_lower_bound = 0
         curr_upper_bound = None
 
-        def divide_pair(pair):
-            delta_x = pair['delta_x']
-            delta_t = pair['delta_t']
-            base_map = pair['base_map']
-            pairs = []
-            if pair['lx2'] == 1:
-                # делим стандартную фракцию, нужно раздуть всё и стандартизовать!
-                for cnum, cube, bm in zip(range(G), self.proto, self.base_maps):
-                    scaled_delta_x = tuple(delta_x[j] * N - cube[j] for j in range(d))
-                    scaled_delta_t = delta_t * G - cnum
-
-                    # применим inv_map, стандартизуя первую фракцию
-                    inv_map = bm.inverse()
-                    new_base_map = inv_map * base_map
-                    new_delta_x  = inv_map.apply_cube_start(cube_start=scaled_delta_x, cube_length=N)
-                    new_pair = {
-                        'delta_x': new_delta_x,
-                        'delta_t': scaled_delta_t,
-                        'base_map': new_base_map,
-                        'lx2': N,
-                        'max_subdivision': pair['max_subdivision'] + 1,
-                    }
-                    pairs.append(new_pair)
-            else:
-                # делим раздутую фракцию, стандартизовать не нужно!
-                for cnum, cube, bm in zip(range(G), self.proto, self.base_maps):
-                    new_cube = base_map.apply_cube(N, cube)
-                    new_base_map = base_map * bm
-                    new_pair = {
-                        'delta_x': tuple(delta_x[j] + new_cube[j] for j in range(d)),
-                        'delta_t': delta_t + cnum,
-                        'base_map': new_base_map,
-                        'lx2': 1,
-                        'max_subdivision': pair['max_subdivision'],
-                    }
-                    pairs.append(new_pair)
-            return pairs
 
         pairs = []
         for junc in junctions:
@@ -517,8 +522,8 @@ class FractalCurve:
             }
             
             # делим два раза - обе части
-            for pair in divide_pair(start_pair):
-                for sub_pair in divide_pair(pair):
+            for pair in self.divide_pair(start_pair):
+                for sub_pair in self.divide_pair(pair):
                     if sub_pair['delta_t'] <= 1:
                         # соседние фракции, попадает в производный стык!
                         continue
@@ -594,10 +599,12 @@ class FractalCurve:
                     scaled_t = t
                 brkline2.append((scaled_v, scaled_t))
 
+            scaled_delta_x = tuple(dx * lcm_x for dx in delta_x)
+            scaled_delta_t = delta_t * lcm_t
             for v1, t1 in int_brkline:
                 for v2, t2 in brkline2:
-                    dv = tuple(v2[j] + delta_x[j]*lcm_x - v1[j] for j in range(d))
-                    dt = t2 + delta_t*lcm_t - t1
+                    dv = tuple(v2[j] + scaled_delta_x[j] - v1[j] for j in range(d))
+                    dt = t2 + scaled_delta_t - t1
                     ratio = ratio_func(d, dv, dt)
                     if ratio > curr_lower_bound:
                         curr_lower_bound = ratio
@@ -609,7 +616,7 @@ class FractalCurve:
             if rel_tol is not None and curr_upper_bound <= (1 + rel_tol) * curr_lower_bound:
                 break
 
-            for sub_pair in divide_pair(pair):
+            for sub_pair in self.divide_pair(pair):
                 sub_pair['upper_bound'] = up_ratio
                 pairs.append(sub_pair)
 
