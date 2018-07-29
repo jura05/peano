@@ -466,20 +466,21 @@ class FractalCurve:
 
         return pairs
 
-    def estimate_ratio(self, ratio_func, junctions=None, upper_bound=None, max_iter=None, rel_tol=None, verbose=0):
+    def estimate_ratio(self, ratio_func, junctions=None, upper_bound=None, max_iter=None, rel_tol=None, find_argmax=False, verbose=0):
         """Estimate ratio of a curve for given junctions.
         Params:
             ratio_func      generic function for ratio; args: d, delta_v, delta_t
                                 we assume it is d-homogeneous
-            junction        junction (or None, for self reduced ratio)
+            junctions       list of junctions (None for all junctions, [None] for self reduced ratio)
             upper_bound     apriori upper bound for ratio; we stop if higher ratio is found
             max_iter        subj
             rel_tol         relative error tolerance
             verbose         print every iteration
+            find_argmax     subj
         Returns dict with keys:
             lower_bound     bounds for ratio
             upper_bound
-            argmax          quad [v1,t1,v2,t2] with maximum ratio
+            argmax          dict with keys {v1,t1,v2,t2,junc}, describing ratio argmax (if options find_argmax is set)
             stats           counter with some statistics
         """
 
@@ -525,7 +526,7 @@ class FractalCurve:
         curr_lower_bound = 0
         curr_upper_bound = None
 
-        pairs = []
+        rich_pairs = []  # пары кривых с доп. информацией
         for junc in junctions:
             if junc is None:
                 delta_x = (0,) * d
@@ -556,16 +557,19 @@ class FractalCurve:
                     junc_pairs.append(sub_pair)
 
             for pair in junc_pairs:
-                pairs.append({'pair': pair, 'upper_bound': dummy_upper_bound, 'max_subdivision': 1})
+                rich_pair = {'pair': pair, 'upper_bound': dummy_upper_bound, 'max_subdivision': 1}
+                if find_argmax:
+                    rich_pair['junc'] = junc
+                rich_pairs.append(rich_pair)
 
         seen_pairs = set()
-        while pairs:
+        while rich_pairs:
             stats['iter'] += 1
             if max_iter is not None and stats['iter'] >= max_iter:
                 break
 
-            info = pairs.pop(0)
-            pair = info['pair']
+            rich_pair = rich_pairs.pop(0)
+            pair = rich_pair['pair']
             delta_x = pair.delta_x
             delta_t = pair.delta_t
             base_map = pair.base_map
@@ -587,7 +591,7 @@ class FractalCurve:
             else:
                 seen_pairs.add(pair_position)
 
-            stats['max_subdivision'] = max(stats['max_subdivision'], info['max_subdivision'])
+            stats['max_subdivision'] = max(stats['max_subdivision'], rich_pair['max_subdivision'])
 
             if verbose:
                 print('iter: {}; max_subdivision: {}; ratio: {} <= X <= {}'.format(
@@ -598,7 +602,7 @@ class FractalCurve:
                 ))
 
             # могла обновиться нижняя оценка, и пара больше не актуальна!
-            if info['upper_bound'] <= curr_lower_bound:
+            if rich_pair['upper_bound'] <= curr_lower_bound:
                 stats['stop_early'] += 1
                 continue
 
@@ -612,7 +616,7 @@ class FractalCurve:
             min_dt = delta_t - mt1
             up_ratio = ratio_func(d, max_dv, min_dt)
 
-            curr_upper_bound = max([up_ratio] + [h['upper_bound'] for h in pairs])
+            curr_upper_bound = max([up_ratio] + [h['upper_bound'] for h in rich_pairs])
 
             if up_ratio <= curr_lower_bound:
                 # нам эта пара больше не интересна!
@@ -657,7 +661,10 @@ class FractalCurve:
                     ratio = ratio_func(d, dv, dt)
                     if ratio > curr_lower_bound:
                         curr_lower_bound = ratio
-                        argmax = None  # todo: приводить v1,t1,v2,t2 к исходному виду, добавить junc
+                        if find_argmax:
+                            argmax = {
+                                'junc': rich_pair['junc'],
+                            }
 
             if upper_bound is not None and curr_lower_bound > upper_bound:
                 break
@@ -666,10 +673,13 @@ class FractalCurve:
                 break
 
             for sub_pair in self.divide_pair(pair):
-                max_subdivision = info['max_subdivision']
+                max_subdivision = rich_pair['max_subdivision']
                 if pair.compare == 0:
                     max_subdivision += 1  # если фракции были равны, номер подразбиения увеличился
-                pairs.append({'pair': sub_pair, 'upper_bound': up_ratio, 'max_subdivision': max_subdivision})
+                new_rich_pair = {'pair': sub_pair, 'upper_bound': up_ratio, 'max_subdivision': max_subdivision}
+                if 'junc' in rich_pair:
+                    new_rich_pair['junc'] = rich_pair['junc']
+                rich_pairs.append(new_rich_pair)
 
         return {
             'lower_bound': curr_lower_bound,
