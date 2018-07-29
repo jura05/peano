@@ -1,5 +1,7 @@
 # coding: utf-8
 
+from fractions import Fraction
+
 class BaseMap:
     """Base map: isometry of cube and (possibly) time reversal.
     Immutable and hashable.
@@ -85,7 +87,7 @@ class BaseMap:
         return type(self)(perm, flip, self.time_rev)
 
     def apply_x(self, x):
-        """Apply isometry to a point x of [0,1]^d."""
+        """Apply isometry to a point x."""
         return tuple(1-x[k] if b else x[k] for k, b in zip(self.perm, self.flip))
 
     def apply_x2(self, x, l):
@@ -108,3 +110,82 @@ class BaseMap:
         """Apply isometry to an edge. Not implemented!"""
         pass
 
+
+class PieceMap:
+    """Special isometry of cube and time.
+    Composition of some BaseMap, shift and scaling.
+    """
+
+    def __init__(self, base_map, shift, scale, time_shift, time_scale):
+        """Create a PieceMap instance.
+        Params:
+            base_map
+            shift
+            scale       params that define space map:
+                        x |--> base_map(shift + scale * x)
+
+            time_shift  
+            time_scale  params that define time map:
+                        t |--> time_shift + time_scale * t
+        """
+        assert base_map.dim == len(shift)
+        self.dim = base_map.dim
+        self.base_map = base_map
+        self.shift = shift
+        self.scale = scale
+        self.time_shift = time_shift
+        self.time_scale = time_scale
+
+    def _data(self):
+        return (self.base_map, self.shift, self.scale, self.time_shift, self.time_scale)
+
+    def __eq__(self, other):
+        return self._data() == other._data()
+
+    def __mul__(self, other):
+        """Composition."""
+        d = self.dim
+        # B(c + lB'(c'+l'x)) = (BB')(a + ll'x), где a = lc' - B'^{-1}(0)/l + B'^{-1}(c)
+        inv = other.base_map.inverse()
+        inv_0 = inv.apply_x(tuple(0 for j in range(d)))
+        inv_c = inv.apply_x(self.shift)
+        new_shift = tuple(self.scale * other.shift[j] - self.scale * inv_0[j] + inv_c[j] for j in range(d))
+        return type(self)(
+            base_map=self.base_map * other.base_map,
+            shift=new_shift,
+            scale=self.scale * other.scale,
+            time_shift=self.time_shift + self.time_scale * other.time_shift,
+            time_scale=self.time_scale * other.time_scale,
+        )
+
+    def inverse(self):
+        d = self.base_map.dim
+        # y = B(c + lx)  <==>  x = B^{-1}(a + y/l), где a = B(-c/l)-B(0)/l
+        y1 = self.base_map.apply_x(tuple(-Fraction(self.shift[j], self.scale) for j in range(d)))
+        y2 = self.base_map.apply_x(tuple(0 for j in range(d)))
+        new_shift = tuple(y1[j] - Fraction(y2[j], self.scale) for j in range(d))
+        return type(self)(
+            base_map=self.base_map.inverse(),
+            shift=new_shift,
+            scale=Fraction(1, self.scale),
+            time_shift=-Fraction(self.time_shift, self.time_scale),
+            time_scale=Fraction(1, self.time_scale),
+        )
+
+    def apply(self, x, t):
+        """Apply isometry to a space point x and time t."""
+        d = self.base_map.dim
+        new_x = tuple(self.shift[j] + self.scale * x[j] for j in range(d))
+        new_x = self.base_map.apply_x(new_x)
+        new_t = self.time_shift + self.time_scale * t
+        return (new_x, new_t)
+
+    @classmethod
+    def id_map(cls, d):
+        return cls(
+            base_map=BaseMap(dim=d),
+            shift=tuple(0 for j in range(d)),
+            scale=1,
+            time_shift=0,
+            time_scale=1,
+        )
