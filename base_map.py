@@ -49,7 +49,7 @@ class BaseMap:
     def __hash__(self):
         return hash(self._data())
 
-    def __str__(self):
+    def __repr__(self):
         if self.dim > 3:
             letters = ['x_{}'.format(i) for i in range(self.dim)]
         else:
