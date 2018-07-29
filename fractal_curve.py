@@ -4,7 +4,7 @@ from fractions import Fraction
 from math import gcd
 from collections import Counter
 
-from base_map import BaseMap
+from base_map import BaseMap, PieceMap
 
 class FractalCurve:
     """Class representing fractal peano curve in [0,1]^d.
@@ -394,8 +394,11 @@ class FractalCurve:
             self.base_map = base_map  # как повёрнута вторая фракция
             self.compare = compare
 
-    # подразбиваем одну из фракций в паре (pair - класса CurveBalancedPair)
-    def divide_pair(self, pair, use_second=False):
+    def divide_pair(self, pair):
+        """Divide CurveBalancedPair.
+        Will process orig_map attribute: it maps original pair to new one
+        """
+
         d = self.dim
         N = self.div
         G = self.genus()
@@ -403,8 +406,10 @@ class FractalCurve:
         delta_x = pair.delta_x
         delta_t = pair.delta_t
         base_map = pair.base_map
+        has_orig_map = hasattr(pair, 'orig_map')
+        orig_maps = []
         pairs = []
-        if (pair.compare == 0) and (not use_second):
+        if pair.compare == 0:
             # делим стандартную фракцию, нужно раздуть всё и стандартизовать!
             for cnum, cube, bm in zip(range(G), self.proto, self.base_maps):
                 scaled_delta_x = tuple(delta_x[j] * N - cube[j] for j in range(d))
@@ -420,19 +425,15 @@ class FractalCurve:
                     base_map=new_base_map,
                     compare=-1,
                 )
-                pairs.append(new_pair)
-        elif (pair.compare == 0) and use_second:
-            # делим вторую фракцию, нужно только раздуть
-            # сейчас не используется!
-            for cnum, cube, bm in zip(range(G), self.proto, self.base_maps):
-                new_cube = base_map.apply_cube(N, cube)
-                new_base_map = base_map * bm
-                new_pair = self.CurveBalancedPair(
-                    delta_x=tuple(delta_x[j]*N + new_cube[j] for j in range(d)),
-                    delta_t=delta_t * G + cnum,
-                    base_map=new_base_map,
-                    compare=1,
-                )
+                if has_orig_map:
+                    orig_map = PieceMap(
+                        base_map=inv_map,
+                        shift=tuple(-cube[j] for j in range(d)),
+                        scale=N,
+                        time_scale=G,
+                        time_shift=-cnum,
+                    )
+                    orig_maps.append(orig_map)
                 pairs.append(new_pair)
         elif pair.compare == -1:
             # делим вторую, раздутую фракцию, стандартизовать не нужно!
@@ -445,6 +446,8 @@ class FractalCurve:
                     base_map=new_base_map,
                     compare=0,
                 )
+                if has_orig_map:
+                    orig_maps.append(PieceMap.id_map(d))
                 pairs.append(new_pair)
         elif pair.compare == 1:
             # делим первую, раздутую фракцию, нужно только повернуть
@@ -462,7 +465,20 @@ class FractalCurve:
                     base_map=new_base_map,
                     compare=0,
                 )
+                if has_orig_map:
+                    orig_map = PieceMap(
+                        base_map=inv_map,
+                        shift=tuple(-cube[j] for j in range(d)),
+                        scale=1,
+                        time_scale=1,
+                        time_shift=-cnum,
+                    )
+                    orig_maps.append(orig_map)
                 pairs.append(new_pair)
+
+        if has_orig_map:
+            for new_pair, new_orig_map in zip(pairs, orig_maps):
+                new_pair.orig_map = new_orig_map * pair.orig_map
 
         return pairs
 
@@ -547,6 +563,8 @@ class FractalCurve:
                 base_map=junc_base_map,
                 compare=0,
             )
+            if find_argmax:
+                start_pair.orig_map = PieceMap.id_map(d)
 
             # дробим каждую из частей (дробление только одной не уменьшает кол-во итераций)
             junc_pairs = []
@@ -662,8 +680,28 @@ class FractalCurve:
                     if ratio > curr_lower_bound:
                         curr_lower_bound = ratio
                         if find_argmax:
+                            inv = pair.orig_map.inverse()
+                            # нужно вернуться обратно
+                            # сначала уберём lcm-ы
+                            v1_frac = tuple(Fraction(v1[j], lcm_x) for j in range(d))
+                            v2_frac = tuple(Fraction(v2_shifted[j], lcm_x) for j in range(d))
+
+                            t1_frac = Fraction(t1, lcm_t)
+                            t2_frac = Fraction(t2_shifted, lcm_t)
+
+                            # теперь обратное преобразование
+                            (orig_v1, orig_t1) = inv.apply(v1_frac, t1_frac)
+                            (orig_v2, orig_t2) = inv.apply(v2_frac, t2_frac)
+
+                            # v2, t2 считаем относительно второй фракции
+                            junc = rich_pair['junc']
+                            if junc is not None:
+                                orig_v2 = tuple(orig_v2[j] - junc[0][j] for j in range(d))
+                                orig_t2 -= 1
                             argmax = {
-                                'junc': rich_pair['junc'],
+                                'v1': orig_v1, 't1': orig_t1,
+                                'v2': orig_v2, 't2': orig_t2,
+                                'junc': junc,
                             }
 
             if upper_bound is not None and curr_lower_bound > upper_bound:
