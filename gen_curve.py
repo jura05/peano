@@ -219,7 +219,7 @@ class CurveGenerator:
         start_st = time.time()
         start_paths = self.width_search(self.start_init, max_steps=max_steps, max_count=start_max_count)
         if not start_paths:
-            return []
+            return
 
         start = {}
         for path in start_paths:
@@ -230,7 +230,7 @@ class CurveGenerator:
         finish_st = time.time()
         finish_paths = self.width_search(self.finish_init, max_steps=max_steps, max_count=finish_max_count, reverse=True)
         if not finish_paths:
-            return []
+            return
         
         finish = {}
         N = self.div

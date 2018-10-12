@@ -35,8 +35,8 @@ def submain(tasks_queue, results_queue):
 def main():
     n_proc = 4
     procs = []
-    tasks_queue = Queue(maxsize=4)
-    results_queue = Queue(maxsize=100)
+    tasks_queue = Queue(maxsize=n_proc)
+    results_queue = Queue(maxsize=n_proc * 2)
     for j in range(n_proc):
         proc = Process(target=submain, args=(tasks_queue, results_queue))
         proc.start()
