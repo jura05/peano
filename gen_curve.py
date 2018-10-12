@@ -4,6 +4,10 @@ import time
 import resource
 from collections import namedtuple
 import logging
+import itertools
+
+import base_map
+from fractal_curve import FractalCurve
 
 # head - квадрат конца пути
 # arr - положение стрелки от входа до выхода в квадрате (A=00, B=10, C=11, D=01, напр.: arr='AB')
@@ -45,9 +49,10 @@ class Path(namedtuple('Path', ['head','prev','len','arr'])):
         print(length, ' '.join([str(n.head)+'['+n.arr+']' for n in nodes]))
 
 
+letter_to_position = {'A': (0, 0), 'B': (1, 0), 'C': (1, 1), 'D': (0, 1)}
+
 # словарь arr[1] => [(delta_square, new_arr), ...]
 def get_next_dict(arr_type, allow_vertex_transit):
-    letter_to_position = {'A': (0, 0), 'B': (1, 0), 'C': (1, 1), 'D': (0, 1)}
     position_to_letter = {v: k for k, v in letter_to_position.items()}
     result = {}
 
@@ -96,6 +101,7 @@ class CurveGenerator:
         self.verbose = verbose
 
         assert exit == (1, 1) or exit == (1, 0)
+        self.exit = exit
 
         if exit == (1, 0):
             self.is_edge = True
@@ -189,31 +195,42 @@ class CurveGenerator:
                     sqsets.append(new_sqset)
         return result
 
-    def width_search(self, paths, steps, reverse=False):
+    # в худшем случае мы удваиваем работу:(
+    def width_search(self, paths, max_steps, max_count, reverse=False):
         """Width-search for given starting paths."""
         curr_paths = paths
         non_sq = self.get_non_sq(reverse)
-        for i in range(steps):
+        for i in range(max_steps):
             new_paths = []
             for path in curr_paths:
                 new_paths += self.continue_path(path, non_sq=non_sq)
+                if len(new_paths) > max_count:
+                    break
+            if len(new_paths) > max_count:
+                break
             curr_paths = new_paths
-            logging.warning('width_search: step %d, expanded to %d' % (i+1, len(curr_paths)))
+            logging.info('width_search: step %d, expanded to %d' % (i+1, len(curr_paths)))
         return curr_paths
 
-    def generate_brkline(self, start_width, finish_width):
+    def generate_brklines(self, start_max_count=100, finish_max_count=1e6):
         """Generate entrance-exit broken line."""
         self.global_counter = 0
+        max_steps = (self.div**2 // 2) - 1;
         start_st = time.time()
-        start_paths = self.width_search(self.start_init, start_width)
+        start_paths = self.width_search(self.start_init, max_steps=max_steps, max_count=start_max_count)
+        if not start_paths:
+            return []
+
         start = {}
         for path in start_paths:
             pid = hash(path.state())
             start.setdefault(pid, []).append(path)
-        logging.warning('start: width: %d, configurations: %d', start_width, len(start))
+        logging.info('start: width: %d, configurations: %d', start_paths[0].len - 1, len(start))
 
         finish_st = time.time()
-        finish_paths = self.width_search(self.finish_init, finish_width, reverse=True)
+        finish_paths = self.width_search(self.finish_init, max_steps=max_steps, max_count=finish_max_count, reverse=True)
+        if not finish_paths:
+            return []
         
         finish = {}
         N = self.div
@@ -224,14 +241,14 @@ class CurveGenerator:
             complement_state = (frozenset(complement_sqset), path.head, rev_arr)
             pid = hash(complement_state)
             finish.setdefault(pid, []).append(path)
+        finish_width = finish_paths[0].len - 1
         logging.info('finish: width %d, configurations: %d', finish_width, len(finish))
 
         finish_pids = frozenset(finish.keys())
 
-        result_paths = []
         depth_st = time.time()
         max_len = N**2 - finish_width
-        print('max_len:', max_len)
+        found_paths = 0
 
         for i, pid in enumerate(start.keys()):
             # вообще говоря, могут быть коллизии из-за hash()
@@ -249,15 +266,17 @@ class CurveGenerator:
                     for mid_path in mid_paths:
                         mid_pid = hash(mid_path.state())
                         for fin_path in finish[mid_pid]:
-                            result_paths.append(glue_paths(start_path, mid_path, fin_path))
+                            found_paths += 1
+                            yield glue_paths(start_path, mid_path, fin_path)
 
             if self.verbose:
                 logging.info(
                     '(%f) %d of %d (%.1f %%): found %d, total: %d',
-                    time.time(), i+1, len(start.keys()), 100 * (i+1)/len(start.keys()), len(mid_paths), len(result_paths),
+                    time.time(), i+1, len(start.keys()), 100 * (i+1)/len(start.keys()), len(mid_paths), found_paths,
                 )
 
         if self.verbose:
+            print('max_len:', max_len)
             print('result:', len(result_paths))
             print('mem:', resource.getrusage(resource.RUSAGE_SELF)[2])
             print('global:', self.global_counter)
@@ -265,7 +284,30 @@ class CurveGenerator:
             print('finish time:', depth_st - finish_st)
             print('depth time:', time.time() - depth_st)
 
-        return result_paths
+    def generate_curves(self, **kwargs):
+        for brkline in self.generate_brklines(**kwargs):
+            for curve in self.generate_curves_for_brkline(brkline):
+                yield curve
+
+    def generate_curves_for_brkline(self, brkline):
+        dim = 2
+        entrance = (0, 0)
+        exit = self.exit
+        bms_variants = []
+        proto = []
+        for cube, arr in brkline:
+            constr = {
+                entrance: letter_to_position[arr[0]], 
+                exit: letter_to_position[arr[1]],
+            }
+            bms_for_cube = base_map.constraint_base_maps(dim, constr)
+            bms_variants.append(bms_for_cube)
+            proto.append(cube)
+
+        for bms in itertools.product(*bms_variants):
+            curve = FractalCurve(dim=dim, div=self.div, proto=proto, base_maps=bms)
+            yield curve
+            
 
 
 def glue_paths(start, mid, fin):
@@ -282,18 +324,9 @@ def glue_paths(start, mid, fin):
     start_data = start.get_data()
     mid_data = mid.get_data()
     fin_data = fin.get_data()
+    rev_fin_data = []
+    for cube, arr in reversed(fin_data):
+        arr = ''.join(reversed(arr))
+        rev_fin_data.append((cube, arr))
 
-    return start_data + mid_data[start.len:] + fin_data[1:]
-
-
-# assert: 4 edge(?) => 298
-# assert: 5 edge => 49700
-# 5-6-11  global: 1.8m
-#   dict: mem: 500, time: 0+5+12
-#   namedtuple: mem: 363, time: 0+6+15 
-#   namedtuple + hash: mem 170
-#   -globalcounter: time: 0+5+12
-#   func->dict: 0+4.5+10.5
-#   all_todo_sqsets: 0+4.5+8.5
-
-# diag: 5 => 2592
+    return start_data + mid_data[start.len:] + rev_fin_data[1:]

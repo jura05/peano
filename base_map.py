@@ -1,6 +1,8 @@
 # coding: utf-8
 
 from fractions import Fraction
+import functools
+import itertools
 
 class BaseMap:
     """Base map: isometry of cube and (possibly) time reversal.
@@ -189,3 +191,25 @@ class PieceMap:
             time_shift=0,
             time_scale=1,
         )
+
+
+# без учёта time_rev
+
+def list_base_maps(dim):
+    res = []
+    for perm in itertools.permutations(range(dim)):
+        for flip in itertools.product([True, False], repeat=dim):
+            res.append(BaseMap(dim=dim, perm=perm, flip=flip, time_rev=False))
+    return res
+
+def constraint_base_maps(dim, points_map):
+    res = []
+    for bm in list_base_maps(dim):
+        good = True
+        for src, dst in points_map.items():
+            if bm.apply_x(src) != dst:
+                good = False
+                break
+        if good: res.append(bm)
+    return res
+
