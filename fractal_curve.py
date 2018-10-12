@@ -1,5 +1,6 @@
 # coding: utf-8
 
+from heapq import heappop, heappush
 from fractions import Fraction
 from math import gcd
 from collections import Counter
@@ -543,6 +544,7 @@ class FractalCurve:
         curr_upper_bound = None
 
         rich_pairs = []  # пары кривых с доп. информацией
+        entry_count = 0
         for junc in junctions:
             if junc is None:
                 delta_x = (0,) * d
@@ -578,7 +580,9 @@ class FractalCurve:
                 rich_pair = {'pair': pair, 'upper_bound': dummy_upper_bound, 'max_subdivision': 1}
                 if find_argmax:
                     rich_pair['junc'] = junc
-                rich_pairs.append(rich_pair)
+                entry_count += 1
+                priority = -dummy_upper_bound
+                heappush(rich_pairs, (priority, entry_count, rich_pair))
 
         seen_pairs = set()
         while rich_pairs:
@@ -586,7 +590,7 @@ class FractalCurve:
             if max_iter is not None and stats['iter'] >= max_iter:
                 break
 
-            rich_pair = rich_pairs.pop(0)
+            rich_pair = heappop(rich_pairs)[-1]
             pair = rich_pair['pair']
             delta_x = pair.delta_x
             delta_t = pair.delta_t
@@ -634,7 +638,8 @@ class FractalCurve:
             min_dt = delta_t - mt1
             up_ratio = ratio_func(d, max_dv, min_dt)
 
-            curr_upper_bound = max([up_ratio] + [h['upper_bound'] for h in rich_pairs])
+            # здесь мы используем, что rich_pairs это heap по priority = (-upper_bound)
+            curr_upper_bound = max(up_ratio, rich_pairs[0][-1]['upper_bound']) if rich_pairs else up_ratio
 
             if up_ratio <= curr_lower_bound:
                 # нам эта пара больше не интересна!
@@ -717,7 +722,8 @@ class FractalCurve:
                 new_rich_pair = {'pair': sub_pair, 'upper_bound': up_ratio, 'max_subdivision': max_subdivision}
                 if 'junc' in rich_pair:
                     new_rich_pair['junc'] = rich_pair['junc']
-                rich_pairs.append(new_rich_pair)
+                entry_count += 1
+                heappush(rich_pairs, (-up_ratio, entry_count, new_rich_pair))
 
         return {
             'lower_bound': curr_lower_bound,
