@@ -88,6 +88,17 @@ class BaseMap:
             flip[k] = b
         return type(self)(perm, flip, self.time_rev)
 
+    def is_oriented(self):
+        assert self.dim == 2
+        oriented = True
+        for f in self.flip:
+            if f: oriented = not oriented
+        if self.perm == (0, 1):
+            return oriented
+        else:
+            return not oriented
+
+
     def apply_x(self, x):
         """Apply isometry to a point x."""
         return tuple(1-x[k] if b else x[k] for k, b in zip(self.perm, self.flip))
@@ -202,9 +213,11 @@ def list_base_maps(dim):
             res.append(BaseMap(dim=dim, perm=perm, flip=flip, time_rev=False))
     return res
 
-def constraint_base_maps(dim, points_map):
+def constraint_base_maps(dim, points_map, oriented=False):
     res = []
     for bm in list_base_maps(dim):
+        if oriented and not bm.is_oriented():
+            continue
         good = True
         for src, dst in points_map.items():
             if bm.apply_x(src) != dst:

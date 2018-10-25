@@ -95,7 +95,7 @@ def get_next_dict(arr_type, allow_vertex_transit):
 
 class CurveGenerator:
     """Generate 2D curves of given div, with entrance at (0,0) and given exit (1,1) or (1,0)."""
-    def __init__(self, div, exit, verbose=0, allow_vertex_transit=False):
+    def __init__(self, div, exit, verbose=0, allow_vertex_transit=False, oriented=False):
         self.div = div
         N = self.div
         self.verbose = verbose
@@ -125,6 +125,7 @@ class CurveGenerator:
             ]
 
         self.next_dict = get_next_dict(curve_type, allow_vertex_transit)
+        self.oriented = oriented
 
 
     def get_non_sq(self, reverse=False):
@@ -250,15 +251,21 @@ class CurveGenerator:
         max_len = N**2 - finish_width
         found_paths = 0
 
-        for i, pid in enumerate(start.keys()):
+        for i, pid in enumerate(sorted(start.keys())):
             # вообще говоря, могут быть коллизии из-за hash()
             # но делать ключом state а не hash(state) накладно по памяти
+            states = []  # stabilize sort
             state_paths = {}
             for path in start[pid]:
-                state_paths.setdefault(path.state(), []).append(path)
+                state = path.state()
+                if state not in state_paths:
+                    state_paths[state] = []
+                    states.append(state)
+                state_paths[state].append(path)
 
             # важна лишь группировка путей по одинаковому state
-            for state, paths in state_paths.items():
+            for state in states:
+                paths = state_paths[state]
                 mid_paths = self.depth_search([paths[0]], max_len, finish_pids)
 
                 # теперь пытаемся всё склеить в один путь
@@ -300,7 +307,7 @@ class CurveGenerator:
                 entrance: letter_to_position[arr[0]], 
                 exit: letter_to_position[arr[1]],
             }
-            bms_for_cube = base_map.constraint_base_maps(dim, constr)
+            bms_for_cube = base_map.constraint_base_maps(dim, constr, oriented=self.oriented)
             bms_variants.append(bms_for_cube)
             proto.append(cube)
 
