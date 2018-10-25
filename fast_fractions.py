@@ -10,6 +10,12 @@ class FastFraction:
         self.n = n // g
         self.d = d // g
 
+    def __gt__(self, other):
+        return self.n * other.d > other.n * self.d
+
+    def __ge__(self, other):
+        return self.n * other.d >= other.n * self.d
+
     def __lt__(self, other):
         return self.n * other.d < other.n * self.d
 
@@ -17,7 +23,7 @@ class FastFraction:
         return self.n * other.d <= other.n * self.d
 
     def __eq__(self, other):
-        return self.n * other.d <= other.n * self.d
+        return (self.n, self.d) == (other.n, other.d)
 
     def __neg__(self):
         return FastFraction(-self.n, self.d)
