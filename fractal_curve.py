@@ -2,6 +2,7 @@
 
 from heapq import heappop, heappush
 from fractions import Fraction
+from fast_fractions import FastFraction
 from math import gcd
 from collections import Counter
 
@@ -395,6 +396,22 @@ class FractalCurve:
             self.base_map = base_map  # как повёрнута вторая фракция
             self.compare = compare
 
+        def get_upper_bound(self, N, ratio_func):
+            # нужно найти максимальное расстояние между точками двух кубов
+            # точки первого куба: 0 <= x[j] <= mx1, второго: delta_x[j] <= x[j] <= delta_x[j] + mx2
+            d = len(self.delta_x)
+            if self.compare == 0:
+                mx1, mx2 = 1, 1
+            elif self.compare == 1:
+                mx1, mx2 = N, 1
+            else:
+                mx1, mx2 = 1, N
+            mt1, mt2 = mx1**d, mx2**d
+            max_dv = tuple(max(abs(mx1 - dx), abs(dx + mx2)) for dx in self.delta_x)
+            min_dt = self.delta_t - mt1
+            return FastFraction(*ratio_func(d, max_dv, min_dt))
+
+    # TODO: сделать методом CurveBalancedPair
     def divide_pair(self, pair):
         """Divide CurveBalancedPair.
         Will process orig_map attribute: it maps original pair to new one
@@ -540,7 +557,7 @@ class FractalCurve:
 
         argmax = None
         stats = Counter()
-        curr_lower_bound = 0
+        curr_lower_bound = FastFraction(0, 1)
         curr_upper_bound = None
 
         rich_pairs = []  # пары кривых с доп. информацией
@@ -553,11 +570,6 @@ class FractalCurve:
             else:
                 delta_x, junc_base_map = junc
                 delta_t = 1
-
-            # считаем максимально возможное редуцированное отношение
-            max_dv = tuple(1 + abs(delta_x[j]) for j in range(d))
-            min_dt = Fraction(1, G)
-            dummy_upper_bound = ratio_func(d, max_dv, min_dt)
 
             start_pair = self.CurveBalancedPair(
                 delta_x=delta_x,
@@ -577,11 +589,14 @@ class FractalCurve:
                     junc_pairs.append(sub_pair)
 
             for pair in junc_pairs:
-                rich_pair = {'pair': pair, 'upper_bound': dummy_upper_bound, 'max_subdivision': 1}
+                # оцениваем сверху отношение для пары, чтобы приоритезировать пары с высоким отношением
+                up_ratio = pair.get_upper_bound(N, ratio_func)
+
+                rich_pair = {'pair': pair, 'upper_bound': up_ratio, 'max_subdivision': 1}
                 if find_argmax:
                     rich_pair['junc'] = junc
                 entry_count += 1
-                priority = -dummy_upper_bound
+                priority = -up_ratio
                 heappush(rich_pairs, (priority, entry_count, rich_pair))
 
         seen_pairs = set()
@@ -624,7 +639,8 @@ class FractalCurve:
                 ))
 
             # могла обновиться нижняя оценка, и пара больше не актуальна!
-            if rich_pair['upper_bound'] <= curr_lower_bound:
+            up_ratio = rich_pair['upper_bound']
+            if up_ratio <= curr_lower_bound:
                 stats['stop_early'] += 1
                 continue
 
@@ -632,14 +648,11 @@ class FractalCurve:
             # Обновим верхнюю границу (curr_upper_bound)
             #
 
-            # нужно найти максимальное расстояние между точками двух кубов
-            # точки первого куба: 0 <= x[j] <= mx1, второго: delta_x[j] <= x[j] <= delta_x[j] + mx2
-            max_dv = tuple(max(abs(mx1 - dx), abs(dx + mx2)) for dx in delta_x)
-            min_dt = delta_t - mt1
-            up_ratio = ratio_func(d, max_dv, min_dt)
-
             # здесь мы используем, что rich_pairs это heap по priority = (-upper_bound)
             curr_upper_bound = max(up_ratio, rich_pairs[0][-1]['upper_bound']) if rich_pairs else up_ratio
+            if float(curr_upper_bound) < 30:
+                print([ ( r[0], r[-1]['upper_bound'] ) for r in rich_pairs])
+                return
 
             if up_ratio <= curr_lower_bound:
                 # нам эта пара больше не интересна!
@@ -681,7 +694,7 @@ class FractalCurve:
                 for v1, t1 in brkline1:
                     dv = tuple(v2_shifted[j] - v1[j] for j in range(d))
                     dt = t2_shifted - t1
-                    ratio = ratio_func(d, dv, dt)
+                    ratio = FastFraction(*ratio_func(d, dv, dt))
                     if ratio > curr_lower_bound:
                         curr_lower_bound = ratio
                         if find_argmax:
@@ -712,13 +725,19 @@ class FractalCurve:
             if upper_bound is not None and curr_lower_bound > upper_bound:
                 break
 
-            if rel_tol is not None and curr_upper_bound <= (1 + rel_tol) * curr_lower_bound:
+            if rel_tol is not None and float(curr_upper_bound) <= (1 + rel_tol) * float(curr_lower_bound):
                 break
 
             for sub_pair in self.divide_pair(pair):
                 max_subdivision = rich_pair['max_subdivision']
                 if pair.compare == 0:
                     max_subdivision += 1  # если фракции были равны, номер подразбиения увеличился
+
+                up_ratio = sub_pair.get_upper_bound(N, ratio_func)
+                if up_ratio <= curr_lower_bound:
+                    # нам эта пара больше не интересна!
+                    continue
+
                 new_rich_pair = {'pair': sub_pair, 'upper_bound': up_ratio, 'max_subdivision': max_subdivision}
                 if 'junc' in rich_pair:
                     new_rich_pair['junc'] = rich_pair['junc']
