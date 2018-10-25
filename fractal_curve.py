@@ -650,10 +650,6 @@ class FractalCurve:
 
             # здесь мы используем, что rich_pairs это heap по priority = (-upper_bound)
             curr_upper_bound = max(up_ratio, rich_pairs[0][-1]['upper_bound']) if rich_pairs else up_ratio
-            if float(curr_upper_bound) < 30:
-                print([ ( r[0], r[-1]['upper_bound'] ) for r in rich_pairs])
-                return
-
             if up_ratio <= curr_lower_bound:
                 # нам эта пара больше не интересна!
                 stats['stop_divide'] += 1
