@@ -18,13 +18,11 @@ def ratio_l2(d, dv, dt):
     return (sum(x**2 for x in dv)**d, dt**2)
 
 def main():
-    transit = True
+    transit = False
     oriented = False
-    div = 5
+    div = 6
     curve_type = 'edge'
     setups = [
-        {'div': div, 'type': curve_type, 'transit': transit, 'oriented': oriented, 'ratio_func': ratio_l1},
-        {'div': div, 'type': curve_type, 'transit': transit, 'oriented': oriented, 'ratio_func': ratio_l2},
         {'div': div, 'type': curve_type, 'transit': transit, 'oriented': oriented, 'ratio_func': ratio_linf},
     ]
     for setup in setups:

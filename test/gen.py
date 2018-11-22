@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # coding: utf-8
 
 import unittest
@@ -14,18 +15,18 @@ from gen_curve import *
 
 class TestGen(unittest.TestCase):
     def test_brkline1(self):
-        gen = CurveGenerator(div=4, exit=(1,0), allow_vertex_transit=True)
-        res = gen.generate_brklines(start_max_count=1, finish_max_count=10**6)
+        gen = CurveGenerator(dim=2, div=4, hdist=1)
+        res = list(gen.generate_brklines(start_max_count=1, finish_max_count=10**6))
         assert len(res) == 298
 
     def test_brkline2(self):
-        gen = CurveGenerator(div=5, exit=(1,0), allow_vertex_transit=True)
-        res = gen.generate_brklines(start_max_count=1, finish_max_count=10**6)
+        gen = CurveGenerator(dim=2, div=5, hdist=1)
+        res = list(gen.generate_brklines(start_max_count=1, finish_max_count=10**6))
         assert len(res) == 49700
 
     def test_brkline3(self):
-        gen = CurveGenerator(div=5, exit=(1,1), allow_vertex_transit=True)
-        res = gen.generate_brklines(start_max_count=1, finish_max_count=10**6)
+        gen = CurveGenerator(dim=2, div=5, hdist=2)
+        res = list(gen.generate_brklines(start_max_count=1, finish_max_count=10**6))
         assert len(res) == 2592
 
 if __name__ == "__main__":
