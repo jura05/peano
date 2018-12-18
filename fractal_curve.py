@@ -24,11 +24,11 @@ class FractalCurve:
     # cube -- куб из прототипа
     # cnum -- номер куба в прототипе
 
-    def __init__(self, dim, div, proto, base_maps):
-        self.dim = dim
-        self.div = div
+    def __init__(self, proto, base_maps):
         self.proto = tuple(tuple(cube) for cube in proto)
         self.base_maps = tuple(base_maps)
+        self.dim = self.get_dim()
+        self.div = self.get_div()
 
     def _data(self):
         return self.dim, self.div, self.proto, self.base_maps
@@ -39,6 +39,12 @@ class FractalCurve:
     def __hash__(self):
         return hash(self._data())
 
+    def get_div(self):
+        return max(self.proto)[0]+1
+
+    def get_dim(self):
+        return len(self.proto[0])
+    
     def genus(self):
         """Fractal genus of the curve."""
         return self.div ** self.dim
