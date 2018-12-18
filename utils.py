@@ -2,8 +2,14 @@
 
 from base_map import BaseMap
 
-def chain2proto(dim, chain_code, start=None):
+def chain2proto(chain_code, bases, start=None):
     """Convert chain code like 'ijK' to curve prototype."""
+    
+    if bases[0][-1] in ['0','1']:
+        dim = len(bases[0])-1
+    else:
+        dim = len(bases[0])
+    
     assert dim <= 6
     letters = 'ijklmn'
     l2v = {}
@@ -27,13 +33,13 @@ def chain2proto(dim, chain_code, start=None):
     return proto
 
 def basis2base_map(basis):
-    dim = len(basis)
+    genus = len(basis)
     letters = 'ijklmn'
-    assert dim <= 6
+    assert genus <= 6
 
     l2i = {l: i for i, l in enumerate(letters)}
-    perm = [None]*dim
-    flip = [None]*dim
+    perm = [None]*genus
+    flip = [None]*genus
 
     for k, l in enumerate(basis):
         lk = l.lower()
