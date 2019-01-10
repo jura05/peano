@@ -61,7 +61,7 @@ class BaseMap:
         s += ",".join([("1-{}" if b else "{}").format(letters[k]) for k, b in zip(self.perm, self.flip)])
         s += ")"
         if self.time_rev:
-            s += "t->-t"
+            s += ",t->-t"
         return s
 
     def __mul__(self, other):
