@@ -110,10 +110,10 @@ def get_rev_curve():
     return FractalCurve(
         proto=[(0, 0), (0, 1), (1, 1), (1, 0)],
         base_maps=[
-            BaseMap([1, 0], [False, False]),       # (x,y)->(y,x)
-            BaseMap([0, 1], [True, False], True),  # (x,y)->(1-x,y), t->-t
-            BaseMap(dim=2),                        # (x,y)->(x,y)
-            BaseMap([1, 0], [True, True]),         # (x,y)->(1-y,1-x)
+            BaseMap([1, 0], [False, False]),                # (x,y)->(y,x)
+            BaseMap([0, 1], [True, False], time_rev=True),  # (x,y)->(1-x,y), t->-t
+            BaseMap(dim=2),                                 # (x,y)->(x,y)
+            BaseMap([1, 0], [True, True]),                  # (x,y)->(1-y,1-x)
         ],
     )
 
