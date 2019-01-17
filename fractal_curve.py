@@ -24,11 +24,11 @@ class FractalCurve:
     # cube -- куб из прототипа
     # cnum -- номер куба в прототипе
 
-    def __init__(self, proto, base_maps):
+    def __init__(self, proto, base_maps, dim = None, div = None):
         self.proto = tuple(tuple(cube) for cube in proto)
         self.base_maps = tuple(base_maps)
-        self.dim = self.get_dim()
-        self.div = self.get_div()
+        self.dim = dim if dim is not None else self.get_dim()
+        self.div = div if div is not None else self.get_div()
 
     def _data(self):
         return self.dim, self.div, self.proto, self.base_maps
