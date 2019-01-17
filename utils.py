@@ -33,13 +33,13 @@ def chain2proto(chain_code, bases, start=None):
     return proto
 
 def basis2base_map(basis):
-    genus = len(basis)
+    dim = len(basis)
     letters = 'ijklmn'
-    assert genus <= 6
+    assert dim <= 6
 
     l2i = {l: i for i, l in enumerate(letters)}
-    perm = [None]*genus
-    flip = [None]*genus
+    perm = [None]*dim
+    flip = [None]*dim
 
     for k, l in enumerate(basis):
         lk = l.lower()
