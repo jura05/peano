@@ -40,7 +40,7 @@ def get_meurthe_curve():
     chain_code = 'jjiJJijj'
     bases = ['ij','Ji','ij','jI','JI','iJ','ji','Ji','ij']
     return FractalCurve(
-        proto=chain2proto(chain_code,bases),
+        proto=chain2proto(chain_code),
         base_maps=[basis2base_map(b) for b in bases],
     )
     
@@ -50,7 +50,7 @@ def get_coil_curve():
     chain_code = 'jjiJJijj'
     bases = ['ji','Ji','ji','jI','JI','jI','ji','Ji','ji']
     return FractalCurve(
-        proto=chain2proto(chain_code,bases),
+        proto=chain2proto(chain_code),
         base_maps=[basis2base_map(b) for b in bases],
     )
 
@@ -60,7 +60,7 @@ def get_serpentine_curve():
     chain_code = 'jjiJJijj'
     bases = ['ij','Ji','ji','iJ','JI','iJ','ji','Ji','ij']
     return FractalCurve(
-        proto=chain2proto(chain_code,bases),
+        proto=chain2proto(chain_code),
         base_maps=[basis2base_map(b) for b in bases],
     )
 
@@ -70,7 +70,7 @@ def get_R_curve():
     chain_code = 'jjiiJIJi'
     bases = ['ji','ji','ij','ij','ij','IJ','JI','JI','ij']
     return FractalCurve(
-        proto=chain2proto(chain_code,bases),
+        proto=chain2proto(chain_code),
         base_maps=[basis2base_map(b) for b in bases],
     )
 
@@ -80,7 +80,7 @@ def get_haverkort_curve_1():
     chain_code = 'kjKikJK'
     bases = ['kji0','jik0','KiJ1','iKJ0','ikj1','KIj0','kIJ1','jKI1']
     return FractalCurve(
-        proto=chain2proto(chain_code,bases),
+        proto=chain2proto(chain_code),
         base_maps=[basis2base_map(b) for b in bases],
     )  
 
@@ -90,7 +90,7 @@ def get_haverkort_curve_2():
     chain_code = 'kjKikJK'
     bases = ['kij1','kji1','KjI0','jKI1','jki0','KJi1','kJI0','iKJ0']
     return FractalCurve(
-        proto=chain2proto(chain_code,bases),
+        proto=chain2proto(chain_code),
         base_maps=[basis2base_map(b) for b in bases],
     )  
 
@@ -100,7 +100,7 @@ def get_tokarev_curve():
     chain_code = 'kjKikJK'
     bases = ['jki', 'kij', 'kij', 'iJK', 'iJK', 'KIj', 'KIj', 'JkI']
     return FractalCurve(
-        proto=chain2proto(chain_code,bases),
+        proto=chain2proto(chain_code),
         base_maps=[basis2base_map(b) for b in bases],
     )
 
