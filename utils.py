@@ -2,10 +2,10 @@
 
 from base_map import BaseMap
 
-def chain2proto(chain_code, bases, start=None):
+def chain2proto(chain_code, start=None):
     """Convert chain code like 'ijK' to curve prototype."""
     
-    dim = len(bases[0])-1 if bases[0][-1] in ['0','1'] else len(bases[0])
+    dim = len(list(set(chain_code.lower())))
     
     assert dim <= 6
     letters = 'ijklmn'
