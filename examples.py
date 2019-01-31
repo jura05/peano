@@ -5,7 +5,7 @@ from base_map import BaseMap
 from utils import chain2proto, basis2base_map
 
 
-# some examples of curves
+# Minimal 2D monofractal curve in L_1 (9)
 def get_hilbert_curve():
     """Example of fractal curve due to D.Hilbert."""
     return FractalCurve(
@@ -35,6 +35,7 @@ def get_peano_curve():
     )
 
 
+# Minimal 2D monofractal curve in L_inf (5.333) and L_2 (5.667)
 def get_meurthe_curve():
 
     chain_code = 'jjiJJijj'
@@ -75,6 +76,7 @@ def get_R_curve():
     )
 
 
+# Minimal 3D monofractal curve with time reversal in L_inf (12.4)
 def get_haverkort_curve_1():
     """3-D curve with time reversal."""
     chain_code = 'kjKikJK'
@@ -85,6 +87,7 @@ def get_haverkort_curve_1():
     )  
 
 
+# Minimal 3D monofractal curve with time reversal in L_1 (89.8) and L_2 (18.6)
 def get_haverkort_curve_2():
     """3-D curve with time reversal."""
     chain_code = 'kjKikJK'
