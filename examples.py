@@ -80,22 +80,22 @@ def get_R_curve():
 def get_haverkort_curve_1():
     """3-D curve with time reversal."""
     chain_code = 'kjKikJK'
-    bases = ['kji0','jik0','KiJ1','iKJ0','ikj1','KIj0','kIJ1','jKI1']
+    bases = ['kji0','jik0','kIj1','iKJ0','IKJ1','KIj0','Kij1','Jki1']
     return FractalCurve(
         proto=chain2proto(chain_code),
         base_maps=[basis2base_map(b) for b in bases],
-    )  
+    )
 
 
 # Minimal 3D monofractal curve with time reversal in L_1 (89.8) and L_2 (18.6)
 def get_haverkort_curve_2():
     """3-D curve with time reversal."""
     chain_code = 'kjKikJK'
-    bases = ['kij1','kji1','KjI0','jKI1','jki0','KJi1','kJI0','iKJ0']
+    bases = ['KIJ1','KJI1','KjI0','Jki1','jki0','kjI1','kJI0','iKJ0']
     return FractalCurve(
         proto=chain2proto(chain_code),
         base_maps=[basis2base_map(b) for b in bases],
-    )  
+    )
 
 
 def get_tokarev_curve():
