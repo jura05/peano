@@ -125,7 +125,6 @@ def get_rev_curve():
 # Discontinuous curve - beginning in square center
 def get_discontinuous_curve():
     return FractalCurve(
-        dim=2, div=3,
         proto=[(1, 1), (0, 1), (0, 0), (1, 0), (2, 0), (2, 1), (2, 2), (1, 2), (0, 2)],
         base_maps=[BaseMap(dim=2)] * 9,
     )
