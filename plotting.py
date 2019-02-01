@@ -15,7 +15,7 @@ from mpl_toolkits.mplot3d import Axes3D
 curve = get_discontinuous_curve()
 #curve = get_morton_curve()
 
-def plot_curves(subdiv_n, dim, genus, numb_sub):
+def plot_curve(subdiv_n, dim, genus, numb_sub):
     
     subdiv_n = array(subdiv_n)
     subdiv_n = subdiv_n/(genus**((numb_sub+1)/dim))
@@ -51,4 +51,4 @@ def plot_curves(subdiv_n, dim, genus, numb_sub):
         ax.plot(subdiv_n[:,0],subdiv_n[:,1],subdiv_n[:,2],'k')
 
 numb_sub = 1
-plot_curves(curve.get_subdivision(k=numb_sub).proto, curve.dim, curve.div**curve.dim, numb_sub)
+plot_curve(curve.get_subdivision(k=numb_sub).proto, curve.dim, curve.div**curve.dim, numb_sub)
