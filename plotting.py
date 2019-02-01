@@ -10,9 +10,9 @@ from mpl_toolkits.mplot3d import Axes3D
 #curve = get_serpentine_curve()
 #curve = get_R_curve()
 #curve = get_haverkort_curve_1()
-#curve = get_haverkort_curve_2()
+curve = get_haverkort_curve_2()
 #curve = get_tokarev_curve()
-curve = get_discontinuous_curve()
+#curve = get_discontinuous_curve()
 #curve = get_morton_curve()
 
 def plot_curve(subdiv_n, dim, genus, numb_sub):
