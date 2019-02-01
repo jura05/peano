@@ -108,6 +108,7 @@ def get_tokarev_curve():
     )
 
 
+# Testing sample
 def get_rev_curve():
     """Curve with time reversal."""
     return FractalCurve(
@@ -121,9 +122,9 @@ def get_rev_curve():
     )
 
 
-# разрывная кривая - начало в центре квадрата
-def get_discontinuous_curve():
+# Discontinuous curve
+def get_morton_curve():
     return FractalCurve(
-        proto=[(1, 1), (0, 1), (0, 0), (1, 0), (2, 0), (2, 1), (2, 2), (1, 2), (0, 2)],
-        base_maps=[BaseMap(dim=2)] * 9,
+        proto=[(0, 0), (1, 0), (0, 1), (1, 1)],
+        base_maps=[BaseMap(dim=2)] * 4,
     )
