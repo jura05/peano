@@ -122,7 +122,7 @@ def get_rev_curve():
     )
 
 
-# Разрывная кривая - начало в центре квадрата
+# Discontinuous curve - beginning in square center
 def get_discontinuous_curve():
     return FractalCurve(
         dim=2, div=3,
