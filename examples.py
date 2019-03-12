@@ -132,9 +132,11 @@ def get_discontinuous_curve():
 
 # Discontinuous curve
 def get_morton_curve():
+    chain_code = 'i','Ij','i'
+    bases = ['ij'] * 4
     return FractalCurve(
-        proto=[(0, 0), (1, 0), (0, 1), (1, 1)],
-        base_maps=[BaseMap(dim=2)] * 4,
+        proto=chain2proto(chain_code),
+        base_maps=[basis2base_map(b) for b in bases],
     )
 
 
