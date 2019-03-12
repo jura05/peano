@@ -5,27 +5,28 @@ from base_map import BaseMap
 def chain2proto(chain_code, start=None):
     """Convert chain code like 'ijK' to curve prototype."""
     
-    dim = len(set(chain_code.lower()))
-    
+    dim = len(set(''.join(chain_code).lower()))
+
     assert dim <= 6
     letters = 'ijklmn'
-    l2v = {}
+
+    vect_dict = {}
     for k in range(dim):
-        l = letters[k]
-        v = [0] * dim
-        v[k] = 1
-        l2v[l] = v
-        l2v[l.upper()] = [-x for x in v]
+        coord = [0]*dim
+        coord[k] = 1
+        vect_dict[letters[k]] = coord
+        vect_dict[letters[k].upper()] = [-m for m in coord]
+        
+    def diag_coord(vector):
+        arg = [vect_dict[k] for k in vector]
+        coord = list(map(sum,zip(*arg)))
+        return coord
 
-    if start is None:
-        start = (0,) * dim
-
-    cube = start
-    proto = [cube]
-    for l in chain_code:
-        diff = l2v[l]
-        cube = [c + d for c, d in zip(cube, diff)]
-        proto.append(cube)
+    proto = [list(map(vect_dict.get,chain_code)) if len(chain_code) == 1 else diag_coord(m) for m in chain_code]
+    
+    proto = [[0] * dim] + proto
+    for l in range(len(proto)-1):
+        proto[l+1] = [c + d for c, d in zip(proto[l], proto[l+1])]
 
     return proto
 
