@@ -2,7 +2,7 @@
 
 from base_map import BaseMap
 
-def chain2proto(chain_code, start=None):
+def chain2proto(chain_code):
     """Convert chain code like 'ijK' to curve prototype."""
     
     dim = len(set(''.join(chain_code).lower()))
