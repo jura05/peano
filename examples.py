@@ -139,7 +139,7 @@ def get_morton_curve():
         base_maps=[basis2base_map(b) for b in bases],
     )
 
-
+'''
 # Polyfractal curve (not realized)
 
 
@@ -198,3 +198,4 @@ def get_luna_curve():
         proto=chain2proto(chain_code),
         base_maps=[basis2base_map(b) for b in bases],
     )
+'''
