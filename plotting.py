@@ -26,7 +26,7 @@ def plot_curve(subdiv_n, dim, genus, sub_numb):
     #Сдвиг всех координат на 1/(2*genus**((sub_numb+1)/(dim))) с учетом минимальных значений по координатам
     subdiv_n = [[subdiv_n[j][i] + max_col[i] + 1/(2*genus**((sub_numb+1)/(dim))) for i in range(dim)] for j in range(len(subdiv_n))]
     
-    #Функция создания сетки для 
+    #Функция создания сетки для графика
     def linspace(genus,sub_numb):
         ticks = list(range(0,int(genus**(sub_numb/2)+1)))
         ticks = [i/genus**(sub_numb/2) for i in ticks]
