@@ -22,9 +22,9 @@ def plot_curve(subdiv_n, dim, genus, sub_numb):
     subdiv_n = [[i/(genus**((sub_numb+1)/dim)) for i in subdiv_n[j]] for j in range(len(subdiv_n))]   
     #Находим минимум по каждой коодинате x,y,z b и т.д., 
     #это необходимо для кривых, у которых точки входа и выхода находятся не в вершинах 
-    max_col = [min([row[i] for row in subdiv_n]) for i in range(dim)]
+    min_col = [min([row[i] for row in subdiv_n]) for i in range(dim)]
     #Сдвиг всех координат на 1/(2*genus**((sub_numb+1)/(dim))) с учетом минимальных значений по координатам
-    subdiv_n = [[subdiv_n[j][i] + max_col[i] + 1/(2*genus**((sub_numb+1)/(dim))) for i in range(dim)] for j in range(len(subdiv_n))]
+    subdiv_n = [[subdiv_n[j][i] - min_col[i] + 1/(2*genus**((sub_numb+1)/(dim))) for i in range(dim)] for j in range(len(subdiv_n))]
     
     #Функция создания сетки для графика
     def linspace(genus,sub_numb):
