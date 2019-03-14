@@ -146,10 +146,7 @@ def get_morton_curve():
 # Tetrafractal curve
 def get_ARW_Curve(k):
 
-    chain_code = [['i','Ij','i'],
-                  ['jiJ'],
-                  ['jiJ'],
-                  ['jiJ']],
+    chain_code = [['i','Ij','i'],'jiJ','jiJ','jiJ'],
     bases = [['3ij0','1jI1','2Ji0','1iJ0'],
              ['3ji0','2Ij1','1ij0','1JI0'],
              ['0ji0','1Ji0','0jI0','1JI0'],
@@ -163,8 +160,7 @@ def get_ARW_Curve(k):
 # Minimal 2D monofractal curve in L_1 (9), L_2 (5), L_inf (5)
 def get_beta_Omega_Curve():
 
-    chain_code = [['jiJ'],
-                  ['jiJ']],
+    chain_code = ['jiJ','jiJ'],
     bases = [['1iJ0','1Ji0','1ji1','1IJ1'],
              ['1iJ0','1Ji0','1ji1','0jI0']]
     return FractalCurve(
@@ -177,8 +173,7 @@ def get_beta_Omega_Curve():
 # Is minimal L_2 (18.3)?
 def get_neptunus_curve():
     
-    chain_code = [['kjKikJK'],
-                  ['kiKjIki']],
+    chain_code = ['kjKikJK','kiKjIki'],
     bases = [['0kji','1kji','1KiJ','1jKI','1ikj','1KJi','0kJI','1jKI'],
              ['0jki','1jki','1iKJ','0KiJ','1JiK','1IKj','0ikj','1ijk']]
     return FractalCurve(
@@ -190,8 +185,7 @@ def get_neptunus_curve():
 # Is minimal L_1 (89.8) and L_2 (18.3)?
 def get_luna_curve():
     
-    chain_code = [['kjKikJK'],
-                  ['kiKjIki']],
+    chain_code = ['kjKikJK','kiKjIki'],
     bases = [['1ijk','0KJi','1KiJ','1jKI','1jik','1IKj','0kJI','1kJI'],
              ['1jik','0JKi','1iKJ','0KiJ','1KjI','1JIk','0ikj','1ikj']]
     return FractalCurve(
