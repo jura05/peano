@@ -36,6 +36,29 @@ def get_peano_curve():
         ],
     )
 
+def get_peano5_curve():
+    id_map = BaseMap(dim=2)
+    x_map = BaseMap([0, 1], [True, False])  # (x,y)->(1-x,y)
+    y_map = BaseMap([0, 1], [False, True])  # (x,y)->(x,1-y)
+    xy_map = BaseMap([0, 1], [True, True])  # (x,y)->(1-x,1-y)
+    return FractalCurve(
+        dim=2, div=5,
+        proto=[
+            (0, 0), (0, 1), (0, 2), (0, 3), (0, 4),
+            (1, 4), (1, 3), (1, 2), (1, 1), (1, 0),
+            (2, 0), (2, 1), (2, 2), (2, 3), (2, 4),
+            (3, 4), (3, 3), (3, 2), (3, 1), (3, 0),
+            (4, 0), (4, 1), (4, 2), (4, 3), (4, 4),
+        ],
+        base_maps=[
+            id_map, x_map, id_map, x_map, id_map,
+            y_map, xy_map, y_map, xy_map, y_map,
+            id_map, x_map, id_map, x_map, id_map,
+            y_map, xy_map, y_map, xy_map, y_map,
+            id_map, x_map, id_map, x_map, id_map,
+        ],
+    )
+
 
 def get_tokarev_curve():
     """3-D curve."""
