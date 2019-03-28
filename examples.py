@@ -129,7 +129,6 @@ def get_discontinuous_curve():
         base_maps=[BaseMap(dim=2)] * 9,
     )
 
-
 # Discontinuous curve
 def get_morton_curve():
     chain_code = 'i','Ij','i'
