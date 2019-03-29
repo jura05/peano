@@ -37,7 +37,7 @@ def plot_curve(subdiv_n, dim, genus, sub_numb):
         ticks = linspace(genus,sub_numb)
     
         plt.figure()
-        plt.gcf().set_size_inches(9,9)
+        plt.gcf().set_size_inches(8.5,8.5)
         plt.xticks(ticks,[])
         plt.yticks(ticks,[])
         plt.grid(True)
@@ -45,12 +45,14 @@ def plot_curve(subdiv_n, dim, genus, sub_numb):
         sub1 = [row[0] for row in subdiv_n]
         sub2 = [row[1] for row in subdiv_n]
         plt.plot(sub1,sub2,'k')
+        
+        plt.savefig('curve_image.png')
 
     elif dim == 3:
     
         ticks = linspace(genus,sub_numb)
     
-        fig = plt.figure(figsize = (9,9))
+        fig = plt.figure(figsize = (8.5,8.5))
         ax = fig.gca(projection='3d')
         ax.set_xlim(0,1)
         ax.set_ylim(0,1)
@@ -63,6 +65,7 @@ def plot_curve(subdiv_n, dim, genus, sub_numb):
         sub2 = [row[1] for row in subdiv_n]
         sub3 = [row[2] for row in subdiv_n]
         ax.plot(sub1,sub2,sub3,'k')
-
+        
+        plt.savefig('curve_image.png')
 
 plot_curve(curve.get_subdivision(k=sub_numb).proto, curve.dim, curve.div**curve.dim, sub_numb)
