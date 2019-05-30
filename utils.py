@@ -49,4 +49,4 @@ def basis2base_map(basis):
         perm[k] = l2i[lk]
         flip[k] = (l != lk)
 
-    return BaseMap(perm, flip, dim, time_rev)
+    return BaseMap(perm, flip, time_rev)

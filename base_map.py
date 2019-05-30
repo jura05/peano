@@ -10,7 +10,7 @@ class BaseMap:
     Acts on function f:[0,1]->[0,1]^d as  Bf: [0,1]--B_t-->[0,1]--f-->[0,1]^d--B_x-->[0,1]^d
     """
 
-    def __init__(self, perm=None, flip=None, dim=None, time_rev=False):
+    def __init__(self, perm=None, flip=None, time_rev=False, dim=None):
         """Create a BaseMap instance.
         Params:
         perm, flip: params, which define isometry of cube
@@ -61,7 +61,7 @@ class BaseMap:
         s += ",".join([("1-{}" if b else "{}").format(letters[k]) for k, b in zip(self.perm, self.flip)])
         s += ")"
         if self.time_rev:
-            s += ",t->-t"
+            s += ",t->1-t"
         return s
 
     def __mul__(self, other):

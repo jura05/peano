@@ -83,19 +83,19 @@ class FractalCurve:
 
         # применяем изометрию куба
         inv = cube_map.inverse()
-        return type(self)(
-            dim = self.dim,
-            div = self.div,
+        return type(curve)(
+            dim=curve.dim,
+            div=curve.div,
 
             # прототип подвергается изометрии
-            proto = [cube_map.apply_cube(curve.div, cube) for cube in curve.proto],
+            proto=[cube_map.apply_cube(curve.div, cube) for cube in curve.proto],
 
             # базовые преобразования сопрягаются: действительно, чтобы получить
             # из преобразованной кривой её фракцию, можно сделать так:
             # - сначала вернуться к исходной кривой (inv)
             # - применить преобразование исходной кривой для перехода к фракции (bm)
             # - перейти к преобразованной кривой (cube_map)
-            base_maps = [cube_map * bm * inv for bm in curve.base_maps],
+            base_maps=[cube_map * bm * inv for bm in curve.base_maps],
         )
 
     def get_fraction(self, cnum):
@@ -168,18 +168,13 @@ class FractalCurve:
         index = {}
 
         while True:
-            if cur_map.time_rev:
-                cur_cnum = -cnum
-            else:
-                cur_cnum = cnum
-            cube = cur_map.apply_cube(self.div, self.proto[cur_cnum])
+            cur_curve = self.apply_base_map(cur_map)
+            cube = cur_curve.proto[cnum]
+
             cubes.append(cube)
             index[cur_map] = len(cubes)-1
 
-            # сначала переходим из исходной кривой во фракцию, потом всё отображаем в текущую кривую
-            # можно было бы хранить cur_curve и писать cur_map = cur_curve.base_maps[cnum] * cur_map
-            cur_map = cur_map * self.base_maps[cur_cnum]
-
+            cur_map = cur_curve.base_maps[cnum] * cur_map
             if cur_map in index:
                 idx = index[cur_map]
                 return cubes[0:idx], cubes[idx:]
@@ -341,7 +336,6 @@ class FractalCurve:
             else:
                 gates.append((entrance,exit))
         gates.append((curve_exit, None))
-
         for i in range(len(gates)-1):
             assert gates[i][1] == gates[i+1][0], 'exit does not correspond to entrance'
 
