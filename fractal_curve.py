@@ -336,8 +336,11 @@ class FractalCurve:
             else:
                 gates.append((entrance,exit))
         gates.append((curve_exit, None))
+
         for i in range(len(gates)-1):
-            assert gates[i][1] == gates[i+1][0], 'exit does not correspond to entrance'
+            if gates[i][1] != gates[i+1][0]:
+                msg = 'exit does not correspond to entrance at ' + str(i)
+                raise Exception(msg)
 
     #
     # Стыки. Реализовано для кривых без обращения времени
