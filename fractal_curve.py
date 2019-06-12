@@ -53,51 +53,6 @@ class FractalCurve(PartialFractalCurve):
     # Работа с базовыми преобразованиями и фракциями
     #
 
-    def reverse(self):
-        """Reverse time in a curve."""
-        return type(self)(
-            dim = self.dim,
-            div = self.div,
-
-            # прототип проходится в обратном порядке
-            proto = reversed(self.proto),
-
-            # базовые преобразования проходятся в обратном порядке
-            # сами по себе они не меняются:
-            #   - если обращения времени не было, то его и не будет
-            #   - изометрия куба не меняется, т.к. время не играет роли
-            base_maps = reversed(self.base_maps),
-        )
-
-    def apply_base_map(self, base_map):
-        """Apply base map to a fractal curve, return new curve."""
-
-        # можно разложить базовое преобразование в произведение (коммутирующих) 
-        # преобразований: обращение времени с тождественной изометрией  +  изометрии куба
-        if base_map.time_rev:
-            curve = self.reverse()
-            cube_map = base_map.cube_map()
-        else:
-            curve = self
-            cube_map = base_map
-
-        # применяем изометрию куба
-        inv = cube_map.inverse()
-        return type(curve)(
-            dim=curve.dim,
-            div=curve.div,
-
-            # прототип подвергается изометрии
-            proto=[cube_map.apply_cube(curve.div, cube) for cube in curve.proto],
-
-            # базовые преобразования сопрягаются: действительно, чтобы получить
-            # из преобразованной кривой её фракцию, можно сделать так:
-            # - сначала вернуться к исходной кривой (inv)
-            # - применить преобразование исходной кривой для перехода к фракции (bm)
-            # - перейти к преобразованной кривой (cube_map)
-            base_maps=[cube_map * bm * inv for bm in curve.base_maps],
-        )
-
     def get_subdivision(self, k=1):
         """Get k-th subdivision of a curve."""
         N = self.div

@@ -29,7 +29,7 @@ def get_int_time_with_cache(dim, N, cnums):
         Gpower *= G
     return t
 
-# time_rev not supported!
+
 class PartialFractalCurve:
     # base_maps - list as in FractalCurve, may contain None
     # gates - (relative entrance, relative exit) pairs  <=>  brkline
@@ -37,10 +37,6 @@ class PartialFractalCurve:
         self.dim = dim
         self.div = div
         self.proto = tuple(proto)
-
-        if any(bm is not None and bm.time_rev for bm in base_maps):
-            raise Exception("time_rev not implemented!")
-
         self.base_maps = tuple(base_maps)
         self.gates = tuple(gates)
         self.genus = self.div ** self.dim
@@ -58,6 +54,31 @@ class PartialFractalCurve:
         cube = self.proto[-1]
         rel_exit = self.gates[-1][1]
         return tuple(Fraction(cube[j] + rel_exit[j], self.div) for j in range(self.dim))
+
+    def reverse(self):
+        """Reverse time in a curve."""
+
+        kwargs = {}
+        if hasattr(self, 'gates'):
+            # ворота идут в обратном порядке, вход и выход меняются местами
+            gates = reversed(reversed(g) for g in gates)
+            kwargs['gates'] = gates
+
+        return type(self)(
+            dim = self.dim,
+            div = self.div,
+
+            # прототип проходится в обратном порядке
+            proto = reversed(self.proto),
+
+            # базовые преобразования проходятся в обратном порядке
+            # сами по себе они не меняются:
+            #   - если обращения времени не было, то его и не будет
+            #   - изометрия куба не меняется, т.к. время не играет роли
+            base_maps = reversed(self.base_maps),
+
+            **kwargs,
+        )
 
     # кандидаты в self.base_maps[cnum]
     def get_allowed_maps(self, cnum):
@@ -102,17 +123,25 @@ class PartialFractalCurve:
     def apply_base_map(self, base_map):
         """Apply base map to a fractal curve, return new curve."""
 
+        # можно разложить базовое преобразование в произведение (коммутирующих) 
+        # преобразований: обращение времени с тождественной изометрией  +  изометрии куба
         if base_map.time_rev:
-            raise Exception("Not implemented")
-
-        cube_map = base_map
+            curve = self.reverse()
+            cube_map = base_map.cube_map()
+        else:
+            curve = self
+            cube_map = base_map
 
         # применяем изометрию куба
 
         # прототип подвергается изометрии
         proto = [cube_map.apply_cube(self.div, cube) for cube in self.proto]
 
-        # базовые преобразования сопрягаются (см. fractal_curve.py)
+        # базовые преобразования сопрягаются: действительно, чтобы получить
+        # из преобразованной кривой её фракцию, можно сделать так:
+        # - сначала вернуться к исходной кривой (inv)
+        # - применить преобразование исходной кривой для перехода к фракции (bm)
+        # - перейти к преобразованной кривой (cube_map)
         inv = cube_map.inverse()
         new_maps = []
         for bm in self.base_maps:
@@ -122,18 +151,21 @@ class PartialFractalCurve:
                 new_bm = cube_map * bm * inv
             new_maps.append(new_bm)
 
-        gates = []
-        for entrance, exit in self.gates:
-            new_entrance = cube_map.apply_x(entrance)
-            new_exit = cube_map.apply_x(exit)
-            gates.append((new_entrance, new_exit))
+        kwargs = {}
+        if hasattr(self, 'gates'):
+            gates = []
+            for entrance, exit in self.gates:
+                new_entrance = cube_map.apply_x(entrance)
+                new_exit = cube_map.apply_x(exit)
+                gates.append((new_entrance, new_exit))
+            kwargs['gates'] = gates
 
         return type(self)(
             dim=self.dim,
             div=self.div,
             proto=proto,
             base_maps=new_maps,
-            gates=gates,
+            **kwargs,
         )
 
     def bm_info(self):
