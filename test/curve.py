@@ -25,7 +25,7 @@ class TestCurve(unittest.TestCase):
 
     def test_fractions(self):
         for curve in self.curves:
-            for i in range(curve.genus()):
+            for i in range(curve.genus):
                 fraction = curve.get_fraction(i)
                 fraction.check()
 

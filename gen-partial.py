@@ -74,7 +74,7 @@ def my_main(pcurve, threshold, rel_tol, sat_pack=10):
         priority = -float(up)
         heappush(active_pairs, (priority, iter_count, {'pair': pair, 'up': up, 'lo': lo}))
 
-    G = pcurve.genus()
+    G = pcurve.genus
     for cnum1 in range(G):
         for cnum2 in range(cnum1 + 2, G):
             pos1 = pcurve.get_piece_position(cnum1)
@@ -142,7 +142,7 @@ def my_main(pcurve, threshold, rel_tol, sat_pack=10):
 
 
     print('ADAPTER STATS:', adapter.stats())
-    #return True
+    return True
 
     # это если попросят модель
     model = adapter.get_model()
@@ -169,14 +169,14 @@ def get_pcurve_for_brkline(dim, div, brkline):
 # l40: found: 2
 def perebor():
     dim = 2
-    div = 7
+    div = 5
     configs = [
         #{'threshold': 60, 'rel_tol': 0.1, 'sat_pack': 50},
         #{'threshold': 40, 'rel_tol': 0.01, 'sat_pack': 10, 'max_iter': None},
-        {'threshold': 40, 'rel_tol': 0.01, 'sat_pack': 10, 'max_iter': None},
+        {'threshold': 80, 'rel_tol': 0.01, 'sat_pack': 10, 'max_iter': 20},
     ]
 
-    curve_gen = CurveGenerator(dim=dim, div=div, hdist=2, verbose=1, max_cdist=1)
+    curve_gen = CurveGenerator(dim=dim, div=div, hdist=2, verbose=1)
     brklines = list(curve_gen.generate_brklines())
 
     for conf in configs:

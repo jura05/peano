@@ -44,9 +44,7 @@ class PartialFractalCurve:
 
         self.base_maps = tuple(base_maps)
         self.gates = tuple(gates)
-
-    def genus(self):
-        return self.div ** self.dim
+        self.genus = self.div ** self.dim
 
     def get_entrance(self):
         cube = self.proto[0]
@@ -139,7 +137,7 @@ class PartialFractalCurve:
         )
 
     def get_possible_curves(self):
-        bm_variants = [self.get_allowed_maps(cnum) for cnum in range(self.genus())]
+        bm_variants = [self.get_allowed_maps(cnum) for cnum in range(self.genus)]
         for base_maps in itertools.product(*bm_variants):
             yield FractalCurve(
                 dim=self.dim,
@@ -163,7 +161,7 @@ class PartialFractalCurve:
         # строим конфигурации:
         # это набор (i, curve), где в curve заданы bm[0], bm[-1], bm[i], bm[i+1]
         configs = []
-        G = self.genus()
+        G = self.genus
         for bm_first in self.get_allowed_maps(0):
             for bm_last in self.get_allowed_maps(G - 1):
                 for i in range(G - 1):
@@ -334,7 +332,7 @@ class CurvePieceBalancedPair:
     def get_int_dist(self):
         dim = self.curve.dim
         N = self.curve.div
-        G = self.curve.genus()
+        G = self.curve.genus
 
         l1, x1, t1 = self.pos1.get_int_coords()
         l2, x2, t2 = self.pos2.get_int_coords()
@@ -409,6 +407,6 @@ def forget(curve):
         dim=curve.dim,
         div=curve.div,
         proto=curve.proto,
-        base_maps=[None for j in range(curve.genus())],  # забыли BaseMap-ы!
+        base_maps=[None for j in range(curve.genus)],  # забыли BaseMap-ы!
         gates=gates,
     )

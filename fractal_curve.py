@@ -29,6 +29,7 @@ class FractalCurve:
         self.base_maps = tuple(base_maps)
         self.dim = dim if dim is not None else self.get_dim()
         self.div = div if div is not None else self.get_div()
+        self.genus = self.div ** self.dim
 
     def _data(self):
         return self.dim, self.div, self.proto, self.base_maps
@@ -45,10 +46,6 @@ class FractalCurve:
     def get_dim(self):
         return len(self.proto[0])
     
-    def genus(self):
-        """Fractal genus of the curve."""
-        return self.div ** self.dim
-
     #
     # Работа с базовыми преобразованиями и фракциями
     #
@@ -157,7 +154,7 @@ class FractalCurve:
 
     def get_exit(self):
         """Exit of a curve, i.e. point f(1)."""
-        start, period = self._get_cubes(self.genus()-1)
+        start, period = self._get_cubes(self.genus-1)
         return self._get_cube_limit(start, period)
 
     def _get_cubes(self, cnum):
@@ -213,7 +210,7 @@ class FractalCurve:
         # локаная для кривой с обращенным временем
         brkline_rev = [(v,1-t) for v,t in reversed(brkline)]  # моменты при прохождении обратной кривой
         result = []
-        for cnum, cube, base_map in zip(range(self.genus()), self.proto, self.base_maps):
+        for cnum, cube, base_map in zip(range(self.genus), self.proto, self.base_maps):
             if base_map.time_rev:
                 curr_brkline = brkline_rev
             else:
@@ -223,7 +220,7 @@ class FractalCurve:
                 # сначала поворачиваем, потом переносим во фракцию
                 bv = base_map.apply_x(v)
                 real_bv = [Fraction(cube[j] + bv[j], self.div) for j in range(self.dim)]
-                real_t = Fraction(cnum + t, self.genus())
+                real_t = Fraction(cnum + t, self.genus)
                 result.append((real_bv, real_t))
 
         # удаляем дублирующиеся точки перехода
@@ -233,7 +230,7 @@ class FractalCurve:
                 # точка перехода
                 continue
             new_result.append(r)
-        assert len(new_result) == self.genus() * (2**self.dim-1) + 1
+        assert len(new_result) == self.genus * (2**self.dim-1) + 1
         return result
 
     def get_edge_touch(self, edge):
@@ -281,7 +278,7 @@ class FractalCurve:
 
     def _get_time_limit(self, start, period):
         # задана начальная и периодическая последовательность номеров кубов, считаем время
-        return self._get_periodic_sum(start, period, self.genus())
+        return self._get_periodic_sum(start, period, self.genus)
 
     # считаем сумму:
     #   s_0/d + s_1/d^2 + ... + s_{k-1}/d^k (непериодическая часть = start) +
@@ -312,7 +309,7 @@ class FractalCurve:
         # dummy checks
         assert d > 0
         assert n > 0
-        assert len(self.proto) == self.genus(), 'bad proto length'
+        assert len(self.proto) == self.genus, 'bad proto length'
 
         for cube in self.proto:
             for j in range(d):
@@ -356,7 +353,7 @@ class FractalCurve:
 
         junctions = set()
 
-        for i in range(self.genus()-1):
+        for i in range(self.genus-1):
             cube = self.proto[i]
             next_cube = self.proto[i+1]
             delta = tuple(nc-c for nc, c in zip(next_cube, cube))
@@ -425,7 +422,7 @@ class FractalCurve:
 
         d = self.dim
         N = self.div
-        G = self.genus()
+        G = self.genus
 
         delta_x = pair.delta_x
         delta_t = pair.delta_t
@@ -543,7 +540,7 @@ class FractalCurve:
 
         d = self.dim
         N = self.div
-        G = self.genus()
+        G = self.genus
 
         # тут можно использовать другие ломаные
         self_brkline = self.get_vertex_brkline()
