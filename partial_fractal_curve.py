@@ -208,7 +208,7 @@ class PartialFractalCurve:
             cube = curve.proto[i]
             next_cube = curve.proto[i+1]
             delta = tuple(nc-c for nc, c in zip(next_cube, cube))
-            base_junc = curve._get_std_junction(delta, curve.base_maps[i], curve.base_maps[i+1])
+            base_junc = Junction(delta, curve.base_maps[i], curve.base_maps[i+1])
             seen_junc.add(base_junc)
 
             to_derive = [base_junc]
@@ -226,20 +226,32 @@ class PartialFractalCurve:
 
         return junc_curves
 
-    def get_derived_junction(self, junction):
+    def get_derived_junction(self, junc):
         if self.base_maps[0] is None or self.base_maps[-1] is None:
             raise Exception("Can't get derivative")
-        delta, base_map = junction
+        base_map = junc.base_map
         cube1 = self.proto[-1]
         cube2 = base_map.apply_cube(self.div, self.proto[0])
-        der_delta = tuple(delta[k]*self.div + cube2[k] - cube1[k] for k in range(self.dim))
-        return self._get_std_junction(der_delta, self.base_maps[-1], base_map * self.base_maps[0])
+        der_delta = tuple(junc.delta_x[k]*self.div + cube2[k] - cube1[k] for k in range(self.dim))
+        return Junction(der_delta, self.base_maps[-1], base_map * self.base_maps[0])
 
-    # поворачиваем, чтобы обеспечить тождественное преобразование на первой фракции
-    @staticmethod
-    def _get_std_junction(delta, bm1, bm2):
+# стык двух фракций кривой
+# всегда приводим к стандартному виду, когда первая фракция в стандартной ориентации
+class Junction:
+    def __init__(self, delta, bm1, bm2):
+        assert not bm1.time_rev and not bm2.time_rev
         bm1_inv = bm1.inverse()
-        return bm1_inv.apply_vec(delta), bm1_inv * bm2
+        self.delta_x = bm1_inv.apply_vec(delta)
+        self.base_map = bm1_inv * bm2
+
+    def _data(self):
+        return (self.delta_x, self.base_map)
+
+    def __eq__(self, other):
+        return self._data() == other._data()
+
+    def __hash__(self):
+        return hash(self._data())
 
 
 # вся инфа о положении фракции в кривой
@@ -362,7 +374,8 @@ class CurvePieceBalancedPair:
             junc_dx = (0,) * dim
         else:
             junc_dt = 1
-            junc_dx, junc_bm = self.junc
+            junc_dx = self.junc.delta_x
+            junc_bm = self.junc.base_map
             # junc: сначала поворот
             x2 = junc_bm.apply_cube(N**l2, x2)
 

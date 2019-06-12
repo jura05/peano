@@ -8,7 +8,7 @@ from math import gcd
 from collections import Counter
 
 from base_map import BaseMap, PieceMap
-from partial_fractal_curve import PartialFractalCurve
+from partial_fractal_curve import PartialFractalCurve, Junction
 
 
 class FractalCurve(PartialFractalCurve):
@@ -344,7 +344,7 @@ class FractalCurve(PartialFractalCurve):
             cube = self.proto[i]
             next_cube = self.proto[i+1]
             delta = tuple(nc-c for nc, c in zip(next_cube, cube))
-            junctions.add(self._get_std_junction(delta, self.base_maps[i], self.base_maps[i+1]))
+            junctions.add(Junction(delta, self.base_maps[i], self.base_maps[i+1]))
 
         to_derive = list(junctions)
         while to_derive:
@@ -545,7 +545,7 @@ class FractalCurve(PartialFractalCurve):
                 delta_t = 0
                 junc_base_map = BaseMap(dim=self.dim)
             else:
-                delta_x, junc_base_map = junc
+                delta_x, junc_base_map = junc.delta_x, junc.base_map
                 delta_t = 1
 
             start_pair = self.CurveBalancedPair(
@@ -687,7 +687,7 @@ class FractalCurve(PartialFractalCurve):
                             # v2, t2 считаем относительно второй фракции
                             junc = rich_pair['junc']
                             if junc is not None:
-                                orig_v2 = tuple(orig_v2[j] - junc[0][j] for j in range(d))
+                                orig_v2 = tuple(orig_v2[j] - junc.delta_x[j] for j in range(d))
                                 orig_t2 -= 1
                             argmax = {
                                 'v1': orig_v1, 't1': orig_t1,
