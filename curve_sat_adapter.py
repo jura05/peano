@@ -134,7 +134,7 @@ class CurveSATAdapter:
     def get_curves_from_model(self, curve, model):
         base_maps = []
         allowed_by_model_variants = []
-        for cnum in range(curve.genus()):
+        for cnum in range(curve.genus):
             allowed_maps = curve.get_allowed_maps(cnum)
             allowed_by_model = []
             for bm in allowed_maps:
