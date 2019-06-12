@@ -36,13 +36,11 @@ def my_main(pcurve, threshold, rel_tol, sat_pack=10):
     # CONFIG:
 
     adapter = CurveSATAdapter(dim=pcurve.dim)
+    adapter.init_curve(pcurve)
 
     threshold_up = threshold * (1 + rel_tol)
     threshold_lo = threshold
     print('thresholds:', threshold_lo, threshold_up)
-
-    for junc, curves in pcurve.get_junctions_info().items():
-        adapter.make_junc_var(junc, curves)
 
     stats = Counter()
 
