@@ -10,7 +10,8 @@ from collections import Counter
 from base_map import BaseMap, PieceMap
 from partial_fractal_curve import PartialFractalCurve
 
-class FractalCurve:
+
+class FractalCurve(PartialFractalCurve):
     """Class representing fractal peano curve in [0,1]^d.
     Params:
         div         positive integer, number of divisions of each side of the cube (characteristic of a curve)
@@ -96,10 +97,6 @@ class FractalCurve:
             # - перейти к преобразованной кривой (cube_map)
             base_maps=[cube_map * bm * inv for bm in curve.base_maps],
         )
-
-    def get_fraction(self, cnum):
-        """Get fraction as a curve."""
-        return self.apply_base_map(self.base_maps[cnum])
 
     def get_subdivision(self, k=1):
         """Get k-th subdivision of a curve."""
@@ -341,9 +338,6 @@ class FractalCurve:
                 msg = 'exit does not correspond to entrance at ' + str(i)
                 raise Exception(msg)
 
-    def is_specialization(self, tmpl):
-        return all(self.base_maps[cnum] == bm for cnum, bm in tmpl.bm_info().items())
-
     @classmethod
     def get_possible_curves(cls, curve):
         bm_variants = [curve.get_allowed_maps(cnum) for cnum in range(curve.genus)]
@@ -406,19 +400,6 @@ class FractalCurve:
                 to_derive.append(dj)
 
         return junctions
-
-    def get_derived_junction(self, junction):
-        delta, base_map = junction
-        cube1 = self.proto[-1]
-        cube2 = base_map.apply_cube(self.div, self.proto[0])
-        der_delta = tuple(delta[k]*self.div + cube2[k] - cube1[k] for k in range(self.dim))
-        return self._get_std_junction(der_delta, self.base_maps[-1], base_map * self.base_maps[0])
-
-    # поворачиваем, чтобы обеспечить тождественное преобразование на первой фракции
-    @staticmethod
-    def _get_std_junction(delta, bm1, bm2):
-        bm1_inv = bm1.inverse()
-        return bm1_inv.apply_vec(delta), bm1_inv * bm2
 
     #
     # Показатели гладкости кривой

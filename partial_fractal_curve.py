@@ -51,6 +51,7 @@ class PartialFractalCurve:
         return tuple(Fraction(cube[j] + rel_entrance[j], self.div) for j in range(self.dim))
 
     def get_fraction(self, cnum):
+        """Get fraction as a curve."""
         return self.apply_base_map(self.base_maps[cnum])
 
     def get_exit(self):
@@ -193,7 +194,6 @@ class PartialFractalCurve:
 
         return junc_curves
 
-    # == FractalCurve.get_derived_junction
     def get_derived_junction(self, junction):
         if self.base_maps[0] is None or self.base_maps[-1] is None:
             raise Exception("Can't get derivative")
@@ -204,7 +204,6 @@ class PartialFractalCurve:
         return self._get_std_junction(der_delta, self.base_maps[-1], base_map * self.base_maps[0])
 
     # поворачиваем, чтобы обеспечить тождественное преобразование на первой фракции
-    # == FractalCurve._get_std_junction
     @staticmethod
     def _get_std_junction(delta, bm1, bm2):
         bm1_inv = bm1.inverse()
