@@ -342,6 +342,9 @@ class FractalCurve:
                 msg = 'exit does not correspond to entrance at ' + str(i)
                 raise Exception(msg)
 
+    def is_specialization(self, tmpl):
+        return all(self.base_maps[cnum] == bm for cnum, bm in tmpl.bm_info().items())
+
     #
     # Стыки. Реализовано для кривых без обращения времени
     #

@@ -1,8 +1,34 @@
 from fractions import Fraction
+import itertools
+from functools import lru_cache
+
 from fast_fractions import FastFraction
+from base_map import BaseMap, constraint_base_maps, list_base_maps
+from fractal_curve import FractalCurve
 
-from base_map import BaseMap, constraint_base_maps
 
+@lru_cache(maxsize=2**20)
+def get_int_cube_with_cache(dim, N, cubes):
+    # Все x умножаем на N*l
+    x = [0] * dim
+    Npower = 1
+    for cube in reversed(cubes):
+        for j in range(dim):
+            x[j] += cube[j] * Npower
+        Npower *= N
+    return x
+
+@lru_cache(maxsize=2**20)
+def get_int_time_with_cache(dim, N, cnums):
+    G = N**dim
+    # все t на G^l
+    # t = c0/G + c1/G**2 + ... = (c_{l-1} + c_{l-2}*G + ..) / G^l
+    t = 0
+    Gpower = 1
+    for cnum in reversed(cnums):
+        t += cnum * Gpower
+        Gpower *= G
+    return t
 
 # time_rev not supported!
 class PartialFractalCurve:
@@ -59,7 +85,10 @@ class PartialFractalCurve:
 
     def specify(self, cnum, base_map):
         if self.base_maps[cnum] is not None:
-            return self
+            if self.base_maps[cnum] == base_map:
+                return self  # nothing to do
+            else:
+                raise Exception("Can't specify curve")
 
         new_base_maps = list(self.base_maps)
         new_base_maps[cnum] = base_map
@@ -109,6 +138,92 @@ class PartialFractalCurve:
             gates=gates,
         )
 
+    def get_possible_curves(self):
+        bm_variants = [self.get_allowed_maps(cnum) for cnum in range(self.genus())]
+        for base_maps in itertools.product(*bm_variants):
+            yield FractalCurve(
+                dim=self.dim,
+                div=self.div,
+                proto=self.proto,
+                base_maps=base_maps,
+            )
+
+    def bm_info(self):
+        return {cnum: bm for cnum, bm in enumerate(self.base_maps) if bm is not None}
+
+    def is_specialization(self, tmpl):
+        return all(self.base_maps[cnum] == bm for cnum, bm in tmpl.bm_info().items())
+
+    #
+    # Стыки.
+    #
+
+    # словарь {junc: curve_list} кривых, приводящих к данному стыку
+    def get_junctions_info(self):
+        # строим конфигурации:
+        # это набор (i, curve), где в curve заданы bm[0], bm[-1], bm[i], bm[i+1]
+        configs = []
+        G = self.genus()
+        for bm_first in self.get_allowed_maps(0):
+            for bm_last in self.get_allowed_maps(G - 1):
+                for i in range(G - 1):
+                    for bm_i in self.get_allowed_maps(i):
+                        if i == 0 and bm_i != bm_first:
+                            continue
+                        for bm_ii in self.get_allowed_maps(i + 1):
+                            if i == G - 2 and bm_ii != bm_last:
+                                continue
+                            curve = self.specify(0, bm_first)\
+                                .specify(G-1, bm_last)\
+                                .specify(i, bm_i)\
+                                .specify(i+1, bm_ii)
+
+                            configs.append((i, curve))
+
+        # конфигурации, приводящие к данному стыку
+        junc_curves = {}
+
+        for i, curve in configs:
+            seen_junc = set()
+            cube = curve.proto[i]
+            next_cube = curve.proto[i+1]
+            delta = tuple(nc-c for nc, c in zip(next_cube, cube))
+            base_junc = curve._get_std_junction(delta, curve.base_maps[i], curve.base_maps[i+1])
+            seen_junc.add(base_junc)
+
+            to_derive = [base_junc]
+            while to_derive:
+                junc = to_derive.pop()
+                dj = curve.get_derived_junction(junc)
+                if dj not in seen_junc:
+                    seen_junc.add(dj)
+                    to_derive.append(dj)
+
+            for junc in seen_junc:
+                if junc not in junc_curves:
+                    junc_curves[junc] = []
+                junc_curves[junc].append(curve)
+
+        return junc_curves
+
+    # == FractalCurve.get_derived_junction
+    def get_derived_junction(self, junction):
+        if self.base_maps[0] is None or self.base_maps[-1] is None:
+            raise Exception("Can't get derivative")
+        delta, base_map = junction
+        cube1 = self.proto[-1]
+        cube2 = base_map.apply_cube(self.div, self.proto[0])
+        der_delta = tuple(delta[k]*self.div + cube2[k] - cube1[k] for k in range(self.dim))
+        return self._get_std_junction(der_delta, self.base_maps[-1], base_map * self.base_maps[0])
+
+    # поворачиваем, чтобы обеспечить тождественное преобразование на первой фракции
+    # == FractalCurve._get_std_junction
+    @staticmethod
+    def _get_std_junction(delta, bm1, bm2):
+        bm1_inv = bm1.inverse()
+        return bm1_inv.apply_vec(delta), bm1_inv * bm2
+
+
 # вся инфа о положении фракции в кривой
 class CurvePiecePosition:
     def __init__(self, dim, div, cnums, cubes):
@@ -116,9 +231,7 @@ class CurvePiecePosition:
         self.div = div
         self.cnums = cnums
         self.cubes = cubes
-
-    def depth(self):
-        return len(self.cnums)
+        self.depth = len(self.cnums)
 
     def specify(self, cnum, cube):
         return type(self)(
@@ -131,33 +244,15 @@ class CurvePiecePosition:
     # естественные целочисленные координаты - время и нулевой угол куба
     # int time: [t, t+1], abs time: [t/G^l, (t+1)/G^l]
     # int cube: cj <= xj <= cj+1, abs cube: cj/N^l <= xj <= (cj+1)/N^l
+    # int curve: [0, N**l]^d, abs curve: [0,1]^d
     # l = depth
-    def int_coords(self):
-        if not hasattr(self, "_int_coords"):
-            self._int_coords = self.get_int_coords()
-        return self._int_coords
-
+    # возвращает [l,x,t]
     def get_int_coords(self):
-        dim = self.dim
-        N = self.div
-        G = N**dim
-
-        # Все x умножаем на N*l, все t на G^l
-        # t = c0/G + c1/G**2 + ... = (c_{l-1} + c_{l-2}*G + ..) / G^l
-        t = 0
-        Gpower = 1
-        for cnum in reversed(self.cnums):
-            t += cnum * Gpower
-            Gpower *= G
-
-        x = [0 for j in range(dim)]
-        Npower = 1
-        for cube in reversed(self.cubes):
-            for j in range(dim):
-                x[j] += cube[j] * Npower
-            Npower *= N
-
-        return {'x': x, 't': t, 'l': len(self.cnums)}
+        return (
+            self.depth,
+            get_int_cube_with_cache(self.dim, self.div, tuple(self.cubes)),
+            get_int_time_with_cache(self.dim, self.div, tuple(self.cnums)),
+        )
 
 class CurvePiece:
     # фракция кривой = кривая + позиция фракции
@@ -177,13 +272,6 @@ class CurvePiece:
         for cnum in self.pos.cnums[:-1]:
             prev_map = prev_map * self.curve.base_maps[cnum]  # именно в таком порядке!
         return prev_map
-
-    def get_last_gates(self):
-        prev_map = self.prev_map()
-        (entrance, exit) = self.curve.gates[self.pos.cnums[-1]]
-        new_entrance = prev_map.apply_x(entrance)
-        new_exit = prev_map.apply_x(exit)
-        return (new_entrance, new_exit)
 
     # делим кривую дальше всеми способами
     def divide(self):
@@ -216,8 +304,9 @@ class CurvePiece:
 class CurvePieceBalancedPair:
     # сбалансированная пара фракций кривых
     # считаем, что t_2 > t_1
-    def __init__(self, curve, pos1, pos2):
+    def __init__(self, curve, junc, pos1, pos2):
         self.curve = curve
+        self.junc = junc
         self.pos1 = pos1
         self.pos2 = pos2
         self.piece1 = CurvePiece(self.curve, self.pos1)
@@ -226,90 +315,77 @@ class CurvePieceBalancedPair:
     def divide(self):
         # при делении кусочка у него уточняется кривая, поэтому берём кривую из него
         # решаем, кого делить
-        if self.pos1.depth() > self.pos2.depth():
-            new_pairs = []
+        new_pairs = []
+        if self.pos1.depth > self.pos2.depth:
             for subpiece in self.piece2.divide():
-                new_pairs.append(type(self)(subpiece.curve, self.pos1, subpiece.pos))
+                new_pairs.append(type(self)(subpiece.curve, self.junc, self.pos1, subpiece.pos))
         else:
-            new_pairs = []
             for subpiece in self.piece1.divide():
-                new_pairs.append(type(self)(subpiece.curve, subpiece.pos, self.pos2))
+                new_pairs.append(type(self)(subpiece.curve, self.junc, subpiece.pos, self.pos2))
 
         return new_pairs
 
-    def upper_bound(self, ratio_func, verbose=False):
+    # пространственные и временные расстояния
+    def int_dist(self):
+        if not hasattr(self, '_int_dist'):
+            self._int_dist = self.get_int_dist()
+        return self._int_dist
+
+    def get_int_dist(self):
         dim = self.curve.dim
         N = self.curve.div
         G = self.curve.genus()
 
-        coords1 = self.pos1.int_coords().copy()
-        coords2 = self.pos2.int_coords().copy()
+        l1, x1, t1 = self.pos1.get_int_coords()
+        l2, x2, t2 = self.pos2.get_int_coords()
 
-        if coords1['l'] == coords2['l']:
-            coords1['mx'] = coords1['mt'] = coords2['mx'] = coords2['mt'] = 1
-            # глубина одинакова, делать вообще ничего не нужно
-        elif coords1['l'] == (coords2['l'] + 1):
-            coords1['mx'] = coords1['mt'] = 1
-            coords2['x'] = tuple(coords2['x'][j] * N for j in range(dim))
-            coords2['t'] = coords2['t'] * G
-            coords2['mx'] = N
-            coords2['mt'] = G
+        if self.junc is None:
+            junc_dt = 0
+            junc_dx = (0,) * dim
+        else:
+            junc_dt = 1
+            junc_dx, junc_bm = self.junc
+            # junc: сначала поворот
+            x2 = junc_bm.apply_cube(N**l2, x2)
+
+        if l1 == l2:
+            mx2 = mt2 = 1
+        elif l1 == l2 + 1:
+            x2 = [x2j * N for x2j in x2]
+            t2 *= G
+            mx2 = N
+            mt2 = G
         else:
             raise Exception("Bad coordinates!")
 
-        if verbose:
-            print(coords1, coords2)
-        dim = self.curve.dim
-        dx = []
+        mx = N**l1
+        mt = mx**dim
+
+        # мы привели целые координаты к следующим:
+        # cube1: x1j <= xj <= x1j + 1         -- кубик внутри кривой [0, mx]^d
+        # cube2: x2j <= xj <= x2j + mx2  -- кубик внутри кривой [0, mx2 * mx]^d
+
+        max_dx = [None] * dim
         for j in range(dim):
-            x1j = coords1['x'][j]
-            x2j = coords2['x'][j]
-            dxj = max(abs(x1j - x2j + coords1['mx']), abs(x1j - x2j - coords2['mx']))
-            dx.append(dxj)
+            x1j = x1[j]
 
-        dt = coords2['t'] - (coords1['t'] + coords1['mt'])
-        return FastFraction(*ratio_func(dim, dx, dt))
+            # junc: потом сдвиг
+            x2j = x2[j] + junc_dx[j] * mx
 
-    # с учётом ворот!
+            dxj = max(abs(x1j - x2j + 1), abs(x1j - x2j - mx2))
+            max_dx[j] = dxj
+
+        min_dt = junc_dt * mt + t2 - (t1 + 1)
+        max_dt = junc_dt * mt + (t2 + mt2) - t1
+        return {'max_dx': max_dx, 'min_dt': min_dt, 'max_dt': max_dt}
+
+    def upper_bound(self, ratio_func):
+        dist = self.int_dist()
+        return FastFraction(*ratio_func(self.curve.dim, dist['max_dx'], dist['min_dt']))
+
     def lower_bound(self, ratio_func):
-        dim = self.curve.dim
-        N = self.curve.div
-        G = self.curve.genus()
-
-        coords1 = self.pos1.int_coords().copy()
-        coords2 = self.pos2.int_coords().copy()
-        dx = []
-
-        # УЧЁТ ВОРОТ
-        piece1_exit = self.piece1.get_last_gates()[1]
-        piece2_entrance = self.piece2.get_last_gates()[0]
-        coords1['x'] = [cj + gj for cj, gj in zip(coords1['x'], piece1_exit)]
-        coords2['x'] = [cj + gj for cj, gj in zip(coords2['x'], piece2_entrance)]
-
-        if coords1['l'] == coords2['l']:
-            coords1['mx'] = coords1['mt'] = coords2['mx'] = coords2['mt'] = 1
-            # глубина одинакова, делать вообще ничего не нужно
-        elif coords1['l'] == (coords2['l'] + 1):
-            coords1['mx'] = coords1['mt'] = 1
-
-            coords2['x'] = tuple(coords2['x'][j] * N for j in range(dim))
-            coords2['t'] = coords2['t'] * G
-            coords2['mx'] = N
-            coords2['mt'] = G
-        else:
-            raise Exception("Bad coordinates!")
-
-        for j in range(dim):
-            # всё просто, т.к. это реальные координаты точек!
-            x1j = coords1['x'][j]
-            x2j = coords2['x'][j]
-            dxj = abs(x1j - x2j)
-            dx.append(dxj)
-
-        # т.к. ворота, то разница во времени минимальна!
-        dt = coords2['t'] - (coords1['t'] + coords1['mt'])
-
-        return FastFraction(*ratio_func(dim, dx, dt))
+        dist = self.int_dist()
+        return FastFraction(*ratio_func(self.curve.dim, dist['max_dx'], dist['max_dt']))
 
 
 def forget(curve):
