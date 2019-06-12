@@ -4,6 +4,7 @@ import itertools
 from pysat.solvers import *
 
 from fractal_curve import FractalCurve
+from base_map import gen_base_maps
 
 # clause = {var: True|False}
 # var - hashable, в числа переводится непосредственно перед вызовом солвера
@@ -15,18 +16,34 @@ class CurveSATAdapter:
         self.curve_vars = set()  # переменные кривых, условия для которых уже записаны
         self.var_no = {}
 
-        self.append_formula([
-            {('junc', None): True},  # у каждой кривой есть автостык
-        ])
+        self.append_clause(
+            {self.get_junc_var(None): True},  # у каждой кривой есть автостык
+        )
 
-    # токен (переменная или её отрицание), истинный тттк в кривой base_maps[cnum] = bm
-    # предполагаем, таким образом, что каждый bm задаётся одним токеном
-    def get_bm_token(self, cnum, bm):
-        if self.dim != 2:
-            raise Exception("dim>2 not implemented!")
-        bm_var = ('base_map', cnum)
-        bm_val = bm.is_oriented()
-        return (bm_var, bm_val)
+    def get_bm_var(self, cnum, bm):
+        return ('base_map', cnum, bm)
+
+    def get_junc_var(self, junc):
+        return ('junc', junc)
+
+    # добавляем условие, что истинна ровно одна из переменных
+    # (var1 or var2 or ... or varN) and (!var_i or !var_j)
+    # здесь есть возможность использовать add_atmost
+    def make_only(self, only_vars):
+        self.append_clause({var: True for var in only_vars})
+        for var_pair in itertools.combinations(only_vars, 2):
+            self.append_clause({var_pair[0]: False, var_pair[1]: False})
+
+    # инициализация условий для заданной Partial-кривой
+    def init_curve(self, curve):
+        # возможные base_map-ы:
+        for cnum in range(curve.genus):
+            self.make_only([self.get_bm_var(cnum, bm) for bm in curve.get_allowed_maps(cnum)])
+
+        # стыки
+        for junc, curves in curve.get_junctions_info().items():
+            self.make_junc_var(junc, curves)
+
 
     # создать переменную Z, такую что Z=True <=> кривая согласуется с данной
     # добавляем условия эквивалентности
@@ -37,81 +54,63 @@ class CurveSATAdapter:
             return Z
         # Z <-> curve  <=>  (Z->curve) and (curve->Z)
         # Z->curve  <=>  !Z or curve  <=>  (!Z or bm1) and (!Z or bm2) and ... (!Z or bmk)
-        clauses = []
         for cnum, bm in curve_info:
-            bm_var, bm_val = self.get_bm_token(cnum, bm)
-            clause = {Z: False, bm_var: bm_val}
-            clauses.append(clause)
-        self.append_formula(clauses)
+            self.append_clause({Z: False, self.get_bm_var(cnum, bm): True})
 
         # curve->Z  <=>  !curve or Z  <=>  !bm1 or !bm2 or ... or !bmk or Z
-        clause_rev = {Z: True}
-        for cnum, bm in curve_info:
-            bm_var, bm_val = self.get_bm_token(cnum, bm)
-            clause_rev[bm_var] = not bm_val
+        clause_rev = {self.get_bm_var(cnum, bm): False for cnum, bm in curve_info}
+        clause_rev[Z] = True
+        self.append_clause(clause_rev)
 
-        self.append_formula([clause_rev])
         self.curve_vars.add(Z)
         return Z
         
     # создать переменную J, такую что J=True <=> в кривой есть стык J
     # методу нужно передать стык и список кривых, в которых он возникает
     def make_junc_var(self, junc, curves):
-        J = ('junc', junc)
+        J = self.get_junc_var(junc)
 
         curve_vars = [self.make_curve_var(curve) for curve in curves]
         # J <-> (c1 or c2 or .. or ck)
 
         # J->(c1 or c2 or .. or ck)  <=>  !J or c1 or c2 .. or ck
-        clause1 = {cv: True for cv in curve_vars}
-        clause1[J] = False
-        self.append_formula([clause1])
+        clause = {cv: True for cv in curve_vars}
+        clause[J] = False
+        self.append_clause(clause)
 
         # (c1 or c2 .. or ck)->J  <=>  !(c1 or .. or ck) or J  <=>  (!c1 and ... !ck) or J  <=> (!c1 or J) and ... (!ck or J)
-        clauses = []
         for cv in curve_vars:
-            clause = {cv: False, J: True}
-            clauses.append(clause)
-        self.append_formula(clauses)
+            self.append_clause({cv: False, J: True})
 
         return J
 
     # !(J and bm1 and bm2 .. and bmk) = !J or !bm1 or !bm1 ..
     def add_forbid_clause(self, junc, curve):
-        clause = {}
-        junc_var = ('junc', junc)
+        junc_var = self.get_junc_var(junc)
+        clause = {self.get_bm_var(cnum, bm): False for cnum, bm in curve.bm_info().items()}
         clause[junc_var] = False
-        for cnum, bm in enumerate(curve.base_maps):
-            if bm is None:
-                continue
-            bm_var, bm_val = self.get_bm_token(cnum, bm)
-            clause[bm_var] = not bm_val
-
-        self.append_formula([clause])
+        self.append_clause(clause)
 
     # переводим var в натуральные числа здесь
+    def append_clause(self, clause):
+        int_clause = []
+        for var, val in clause.items():
+            if var not in self.var_no:
+                max_var_no = 1 + len(self.var_no)
+                self.var_no[var] = max_var_no
+            var_no = self.var_no[var]
+            token = var_no if val else -var_no
+            int_clause.append(token)
+        self.int_clauses.append(int_clause)
+
     def append_formula(self, clauses):
         for clause in clauses:
-            for var in clause.keys():
-                if var not in self.var_no:
-                    max_var_no = 1 + len(self.var_no)
-                    self.var_no[var] = max_var_no
-                    
-        int_clauses = []
-        for clause in clauses:
-            int_clause = []
-            for var, val in clause.items():
-                var_no = self.var_no[var]
-                token = var_no if val else -var_no
-                int_clause.append(token)
-            int_clauses.append(int_clause)
-
-        self.int_clauses += int_clauses
+            self.append_clause(clause)
 
     def stats(self):
         return {
-            'clauses_count', len(self.int_clauses),
-            'variables_count', len(self.var_no),
+            'clauses_count': len(self.int_clauses),
+            'variables_count': len(self.var_no),
         }
 
     def solve(self):
@@ -138,8 +137,8 @@ class CurveSATAdapter:
             allowed_maps = curve.get_allowed_maps(cnum)
             allowed_by_model = []
             for bm in allowed_maps:
-                bm_var, bm_val = self.get_bm_token(cnum, bm)
-                if (bm_var not in model) or (model[bm_var] == bm_val):
+                bm_var = self.get_bm_var(cnum, bm)
+                if (bm_var not in model) or model[bm_var]:
                     allowed_by_model.append(bm)
             if not allowed_by_model:
                 return None
@@ -151,7 +150,7 @@ class CurveSATAdapter:
             juncs = full_curve.get_junctions()
             has_bad_juncs = False
             for junc in juncs:
-                junc_var = ('junc', junc)
+                junc_var = self.get_junc_var(junc)
                 if junc_var in model and not model[junc_var]:
                     # bad curve
                     has_bad_juncs = True

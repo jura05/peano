@@ -297,7 +297,9 @@ class CurveGenerator:
                 global_entrance: entrance,
                 global_exit: exit,
             }
-            bms_for_cube = base_map.constraint_base_maps(self.dim, constr, oriented=self.oriented)
+            bms_for_cube = base_map.constraint_base_maps(self.dim, constr)
+            if self.oriented:
+                bms_for_cube = [bm for bm in bms_for_cube if bm.is_oriented()]
             bms_variants.append(bms_for_cube)
             proto.append(cube)
 

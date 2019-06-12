@@ -206,6 +206,13 @@ class PieceMap:
 
 # без учёта time_rev
 
+def gen_base_maps(dim):
+    for perm in itertools.permutations(range(dim)):
+        for flip in itertools.product([True, False], repeat=dim):
+            for time_rev in [True, False]:
+                yield BaseMap(dim=dim, perm=perm, flip=flip, time_rev=time_rev)
+
+# legacy
 def list_base_maps(dim):
     res = []
     for perm in itertools.permutations(range(dim)):
@@ -213,11 +220,9 @@ def list_base_maps(dim):
             res.append(BaseMap(dim=dim, perm=perm, flip=flip, time_rev=False))
     return res
 
-def constraint_base_maps(dim, points_map, oriented=False):
+def constraint_base_maps(dim, points_map):
     res = []
     for bm in list_base_maps(dim):
-        if oriented and not bm.is_oriented():
-            continue
         good = True
         for src, dst in points_map.items():
             if bm.apply_x(src) != dst:
@@ -225,4 +230,3 @@ def constraint_base_maps(dim, points_map, oriented=False):
                 break
         if good: res.append(bm)
     return res
-
