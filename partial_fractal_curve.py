@@ -4,7 +4,6 @@ from functools import lru_cache
 
 from fast_fractions import FastFraction
 from base_map import BaseMap, constraint_base_maps, list_base_maps
-from fractal_curve import FractalCurve
 
 
 @lru_cache(maxsize=2**20)
@@ -135,16 +134,6 @@ class PartialFractalCurve:
             base_maps=new_maps,
             gates=gates,
         )
-
-    def get_possible_curves(self):
-        bm_variants = [self.get_allowed_maps(cnum) for cnum in range(self.genus)]
-        for base_maps in itertools.product(*bm_variants):
-            yield FractalCurve(
-                dim=self.dim,
-                div=self.div,
-                proto=self.proto,
-                base_maps=base_maps,
-            )
 
     def bm_info(self):
         return {cnum: bm for cnum, bm in enumerate(self.base_maps) if bm is not None}
@@ -386,27 +375,3 @@ class CurvePieceBalancedPair:
         return FastFraction(*ratio_func(self.curve.dim, dist['max_dx'], dist['max_dt']))
 
 
-def forget(curve):
-    curve_entrance = curve.get_entrance()
-    curve_exit = curve.get_exit()
-
-    # не создаём дробные ворота!
-    def fix(x):
-        return int(x) if x == int(x) else x
-
-    curve_entrance = tuple(fix(ce) for ce in curve_entrance)
-    curve_exit = tuple(fix(ce) for ce in curve_exit)
-
-    gates = []
-    for bm in curve.base_maps:
-        new_entrance = bm.apply_x(curve_entrance)
-        new_exit = bm.apply_x(curve_exit)
-        gates.append((new_entrance, new_exit))
-
-    return PartialFractalCurve(
-        dim=curve.dim,
-        div=curve.div,
-        proto=curve.proto,
-        base_maps=[None for j in range(curve.genus)],  # забыли BaseMap-ы!
-        gates=gates,
-    )

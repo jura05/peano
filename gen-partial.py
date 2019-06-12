@@ -9,7 +9,7 @@ from heapq import heappop, heappush
 from fractions import Fraction
 
 from examples import *
-from partial_fractal_curve import CurvePiecePosition, CurvePieceBalancedPair, forget, PartialFractalCurve,  get_int_cube_with_cache
+from partial_fractal_curve import CurvePiecePosition, CurvePieceBalancedPair, PartialFractalCurve,  get_int_cube_with_cache
 from fractal_curve import FractalCurve
 from base_map import BaseMap, constraint_base_maps, list_base_maps
 from curve_sat_adapter import CurveSATAdapter
@@ -218,7 +218,7 @@ def bauman():
     #good.estimate_ratio(ratio, rel_tol=0.002, verbose=1)
     good = good.get_subdivision(2)
     #good.estimate_ratio(ratio, rel_tol=0.002, verbose=1)
-    my_main(forget(good), 32.1, 0.01, 200)
+    my_main(good.forget(), 32.1, 0.01, 200)
 
 if __name__ == "__main__":
     perebor()

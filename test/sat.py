@@ -27,7 +27,7 @@ class TestCurve(unittest.TestCase):
             for junc, curves in junc_info.items():
                 adapter.make_junc_var(junc, curves)
 
-            for curve in pcurve.get_possible_curves(FractalCurve):
+            for curve in FractalCurve.get_possible_curves(pcurve):
                 juncs = curve.get_junctions()
                 model = adapter.get_model_from_curve(curve)
                 for junc in juncs:

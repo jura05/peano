@@ -1,5 +1,6 @@
 # coding: utf-8
 
+import itertools
 from heapq import heappop, heappush
 from fractions import Fraction
 from fast_fractions import FastFraction
@@ -7,6 +8,7 @@ from math import gcd
 from collections import Counter
 
 from base_map import BaseMap, PieceMap
+from partial_fractal_curve import PartialFractalCurve
 
 class FractalCurve:
     """Class representing fractal peano curve in [0,1]^d.
@@ -341,6 +343,42 @@ class FractalCurve:
 
     def is_specialization(self, tmpl):
         return all(self.base_maps[cnum] == bm for cnum, bm in tmpl.bm_info().items())
+
+    @classmethod
+    def get_possible_curves(cls, curve):
+        bm_variants = [curve.get_allowed_maps(cnum) for cnum in range(curve.genus)]
+        for base_maps in itertools.product(*bm_variants):
+            yield cls(
+                dim=curve.dim,
+                div=curve.div,
+                proto=curve.proto,
+                base_maps=base_maps,
+            )
+
+    def forget(self):
+        curve_entrance = self.get_entrance()
+        curve_exit = self.get_exit()
+
+        # не создаём дробные ворота!
+        def fix(x):
+            return int(x) if x == int(x) else x
+
+        curve_entrance = tuple(fix(ce) for ce in curve_entrance)
+        curve_exit = tuple(fix(ce) for ce in curve_exit)
+
+        gates = []
+        for bm in self.base_maps:
+            new_entrance = bm.apply_x(curve_entrance)
+            new_exit = bm.apply_x(curve_exit)
+            gates.append((new_entrance, new_exit))
+
+        return PartialFractalCurve(
+            dim=self.dim,
+            div=self.div,
+            proto=self.proto,
+            base_maps=[None for j in range(self.genus)],  # забыли BaseMap-ы!
+            gates=gates,
+        )
 
     #
     # Стыки. Реализовано для кривых без обращения времени

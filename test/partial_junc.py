@@ -21,7 +21,7 @@ class TestCurve(unittest.TestCase):
     def test_curves(self):
         for pcurve in self.curves:
             junc_info = pcurve.get_junctions_info()
-            for curve in pcurve.get_possible_curves(FractalCurve):
+            for curve in FractalCurve.get_possible_curves(pcurve):
                 juncs = curve.get_junctions()
                 # проверяем, что для каждого найденного стыка есть порождающая кривая
                 for junc in juncs:
