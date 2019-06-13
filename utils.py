@@ -1,6 +1,9 @@
 # coding: utf-8
 
+import re
+
 from base_map import BaseMap
+
 
 def chain2proto(chain_code):
     """Convert chain code like 'ijK' to curve prototype."""
@@ -49,4 +52,24 @@ def basis2base_map(basis):
         perm[k] = l2i[lk]
         flip[k] = (l != lk)
 
+    return BaseMap(perm, flip, time_rev)
+
+def bmstr2base_map(bmstr):
+    if '1-t' in bmstr:
+        time_rev = True
+    else:
+        time_rev = False
+    match = re.match('\(x,y\)->\((.*),(.*)\)', bmstr)
+    if not match:
+        print('@@@',bmstr)
+        
+    g1, g2 = match.groups()
+    if 'x' in g1:
+        perm = [0, 1]
+    else:
+        perm = [1, 0]
+    flip = [False]*2
+    flip[0] = ('1-' in g1)
+    flip[1] = ('1-' in g2)
+    
     return BaseMap(perm, flip, time_rev)

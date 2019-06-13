@@ -1,9 +1,13 @@
+import time
 from fractions import Fraction
 import itertools
 from functools import lru_cache
+from collections import Counter
+from heapq import heappop, heappush
 
 from fast_fractions import FastFraction
-from base_map import BaseMap, constraint_base_maps, list_base_maps
+from base_map import BaseMap, constraint_base_maps, gen_constraint_cube_maps
+from curve_sat_adapter import CurveSATAdapter
 
 
 @lru_cache(maxsize=2**20)
@@ -33,13 +37,25 @@ def get_int_time_with_cache(dim, N, cnums):
 class PartialFractalCurve:
     # base_maps - list as in FractalCurve, may contain None
     # gates - (relative entrance, relative exit) pairs  <=>  brkline
-    def __init__(self, dim, div, proto, base_maps, gates):
+    def __init__(self, dim, div, proto, base_maps, gates, allow_time_rev=False):
         self.dim = dim
         self.div = div
         self.proto = tuple(proto)
         self.base_maps = tuple(base_maps)
         self.gates = tuple(gates)
+        self.allow_time_rev = allow_time_rev
         self.genus = self.div ** self.dim
+
+    # создать кривую с другим прототипом/base_maps/whatever
+    def changed(self, proto=None, base_maps=None, gates=None, allow_time_rev=None):
+        return type(self)(
+            dim=self.dim,
+            div=self.div,
+            proto=(proto if proto is not None else self.proto),
+            base_maps=(base_maps if base_maps is not None else self.base_maps),
+            gates=(gates if gates is not None else self.gates),
+            allow_time_rev=(allow_time_rev if allow_time_rev is not None else self.allow_time_rev),
+        )
 
     def get_entrance(self):
         cube = self.proto[0]
@@ -61,13 +77,9 @@ class PartialFractalCurve:
         kwargs = {}
         if hasattr(self, 'gates'):
             # ворота идут в обратном порядке, вход и выход меняются местами
-            gates = reversed(reversed(g) for g in gates)
-            kwargs['gates'] = gates
+            kwargs['gates'] = reversed([(g[1], g[0]) for g in self.gates])
 
-        return type(self)(
-            dim = self.dim,
-            div = self.div,
-
+        return self.changed(
             # прототип проходится в обратном порядке
             proto = reversed(self.proto),
 
@@ -81,18 +93,21 @@ class PartialFractalCurve:
         )
 
     # кандидаты в self.base_maps[cnum]
-    def get_allowed_maps(self, cnum):
+    def gen_allowed_maps(self, cnum):
         if self.base_maps[cnum] is not None:
             # базовое преобразование уже определено!
-            return [self.base_maps[cnum]]
+            yield self.base_maps[cnum]
+            return
 
-        curve_entrance = self.get_entrance()
+        curve_entr = self.get_entrance()
         curve_exit = self.get_exit()
-        (piece_entrance, piece_exit) = self.gates[cnum]
-        return constraint_base_maps(
-            self.dim,
-            {curve_entrance: piece_entrance, curve_exit: piece_exit},
-        )
+        piece_entr, piece_exit = self.gates[cnum]
+        for bm in gen_constraint_cube_maps(self.dim, {curve_entr: piece_entr, curve_exit: piece_exit}):
+            yield bm
+            
+        if self.allow_time_rev:
+            for bm in gen_constraint_cube_maps(self.dim, {curve_entr: piece_exit, curve_exit: piece_entr}):
+                yield bm.reverse_time()
 
     def get_piece_position(self, cnum):
         return CurvePiecePosition(
@@ -108,20 +123,14 @@ class PartialFractalCurve:
                 return self  # nothing to do
             else:
                 raise Exception("Can't specify curve")
-
         new_base_maps = list(self.base_maps)
         new_base_maps[cnum] = base_map
-
-        return type(self)(
-            dim=self.dim,
-            div=self.div,
-            proto=self.proto,
-            base_maps=new_base_maps,
-            gates=self.gates,
-        )
+        return self.changed(base_maps=new_base_maps)
 
     def apply_base_map(self, base_map):
         """Apply base map to a fractal curve, return new curve."""
+        if base_map.dim != self.dim:
+            raise Exception("Incompatible base map!")
 
         # можно разложить базовое преобразование в произведение (коммутирующих) 
         # преобразований: обращение времени с тождественной изометрией  +  изометрии куба
@@ -135,7 +144,7 @@ class PartialFractalCurve:
         # применяем изометрию куба
 
         # прототип подвергается изометрии
-        proto = [cube_map.apply_cube(self.div, cube) for cube in self.proto]
+        proto = [cube_map.apply_cube(curve.div, cube) for cube in curve.proto]
 
         # базовые преобразования сопрягаются: действительно, чтобы получить
         # из преобразованной кривой её фракцию, можно сделать так:
@@ -144,7 +153,7 @@ class PartialFractalCurve:
         # - перейти к преобразованной кривой (cube_map)
         inv = cube_map.inverse()
         new_maps = []
-        for bm in self.base_maps:
+        for bm in curve.base_maps:
             if bm is None:
                 new_bm = None
             else:
@@ -152,27 +161,128 @@ class PartialFractalCurve:
             new_maps.append(new_bm)
 
         kwargs = {}
-        if hasattr(self, 'gates'):
+        if hasattr(curve, 'gates'):
             gates = []
-            for entrance, exit in self.gates:
-                new_entrance = cube_map.apply_x(entrance)
+            for entr, exit in curve.gates:
+                new_entr = cube_map.apply_x(entr)
                 new_exit = cube_map.apply_x(exit)
-                gates.append((new_entrance, new_exit))
+                gates.append((new_entr, new_exit))
             kwargs['gates'] = gates
 
-        return type(self)(
-            dim=self.dim,
-            div=self.div,
-            proto=proto,
-            base_maps=new_maps,
-            **kwargs,
-        )
+        return self.changed(proto=proto, base_maps=new_maps, **kwargs)
 
     def bm_info(self):
         return {cnum: bm for cnum, bm in enumerate(self.base_maps) if bm is not None}
 
     def is_specialization(self, tmpl):
         return all(self.base_maps[cnum] == bm for cnum, bm in tmpl.bm_info().items())
+
+    # lower_bound - если кривая хуже этой границы - нам не подходит
+    # upper_bound - если кривая лучше - нам подходит
+    def estimate_ratio(self, ratio_func, lower_bound, upper_bound, max_iter=10**6, sat_pack=10, find_model=False):
+        adapter = CurveSATAdapter(dim=self.dim)
+        adapter.init_curve(self)
+        stats = Counter()
+
+        active_pairs = []
+        bads = []
+        def add_pair(pair):
+            stats['iter_count'] += 1
+            up = pair.upper_bound(ratio_func)
+
+            if float(up) < upper_bound:
+                # Not interesed
+                stats['good'] += 1
+                return
+
+            lo = pair.lower_bound(ratio_func)
+            if float(lo) > lower_bound:
+                bads.append(pair)
+                # found zapret
+                stats['good'] += 1
+                stats['bad'] += 1
+                return
+
+            priority = -float(up)
+            heappush(active_pairs, (priority, stats['iter_count'], {'pair': pair, 'up': up, 'lo': lo}))
+
+        def forbid(bad_pairs):
+            while bad_pairs:
+                bad_pair = bad_pairs.pop()
+                adapter.add_forbid_clause(bad_pair.junc, bad_pair.curve)
+
+        G = self.genus
+        for cnum1 in range(G):
+            for cnum2 in range(cnum1 + 2, G):
+                pos1 = self.get_piece_position(cnum1)
+                pos2 = self.get_piece_position(cnum2)
+                pair = CurvePieceBalancedPair(self, None, pos1, pos2)
+                add_pair(pair)
+
+        for junc in self.get_junctions_info().keys():
+            last_cnum1 = 0 if junc.time_rev else G - 1
+            first_cnum2 = G - 1 if junc.base_map.time_rev else 0
+            for cnum1 in range(G):
+                for cnum2 in range(G):
+                    if (cnum1, cnum2) == (last_cnum1, first_cnum2):
+                        continue
+                    pos1 = self.get_piece_position(cnum1)
+                    pos2 = self.get_piece_position(cnum2)
+                    pair = CurvePieceBalancedPair(self, junc, pos1, pos2)
+                    add_pair(pair)
+
+        no_model = None
+        it = 0
+        while active_pairs and it < max_iter:
+            it += 1
+            worst_item = heappop(active_pairs)[-1]
+            worst_pair = worst_item['pair']
+
+            if it % 1000 == 0:
+                print({
+                    'iter': it,
+                    'pairs': len(active_pairs),
+                    'up': float(worst_item['up']),
+                    'depth': (worst_pair.pos1.depth, worst_pair.pos2.depth),
+                })
+                print(stats)
+
+            for subpair in worst_pair.divide():
+                add_pair(subpair)
+
+            if it % sat_pack == 0 and bads:
+                start_time = time.time()
+                print('it:', it, 'adapter stats:', adapter.stats())
+                forbid(bads)
+                bads = []
+                if not adapter.solve():
+                    no_model = True
+                    break
+
+        if no_model:
+            print('NO SAT MODEL!')
+            return None
+
+        forbid(bads)
+        if not adapter.solve():
+            print('NO SAT MODEL!')
+            return
+
+        print('SAT MODEL EXISTS!')
+        if not find_model:
+            return True
+
+        # это если попросят модель
+        model = adapter.get_model()
+        found_curves = adapter.get_curves_from_model(self, model)
+        for found_curve in found_curves:
+            print('found curve:', found_curve.proto, found_curve.base_maps)
+            #res2 = found_curve.estimate_ratio(ratio, rel_tol=0.002, verbose=1)
+            #print(res2)
+            #print('FOUND upper bound:', str(res2['upper_bound']))
+
+        return True
+
 
     #
     # Стыки.
@@ -184,68 +294,84 @@ class PartialFractalCurve:
         # это набор (i, curve), где в curve заданы bm[0], bm[-1], bm[i], bm[i+1]
         configs = []
         G = self.genus
-        for bm_first in self.get_allowed_maps(0):
-            for bm_last in self.get_allowed_maps(G - 1):
-                for i in range(G - 1):
-                    for bm_i in self.get_allowed_maps(i):
-                        if i == 0 and bm_i != bm_first:
+        for bm_first in self.gen_allowed_maps(0):
+            for bm_last in self.gen_allowed_maps(G - 1):
+                for cnum in range(G - 1):
+                    for bm_i in self.gen_allowed_maps(cnum):
+                        if cnum == 0 and bm_i != bm_first:
                             continue
-                        for bm_ii in self.get_allowed_maps(i + 1):
-                            if i == G - 2 and bm_ii != bm_last:
+                        for bm_ii in self.gen_allowed_maps(cnum + 1):
+                            if cnum + 1 == G - 1 and bm_ii != bm_last:
                                 continue
                             curve = self.specify(0, bm_first)\
-                                .specify(G-1, bm_last)\
-                                .specify(i, bm_i)\
-                                .specify(i+1, bm_ii)
+                                .specify(G - 1, bm_last)\
+                                .specify(cnum, bm_i)\
+                                .specify(cnum + 1, bm_ii)
 
-                            configs.append((i, curve))
+                            configs.append((cnum, curve))
 
         # конфигурации, приводящие к данному стыку
         junc_curves = {}
 
-        for i, curve in configs:
-            seen_junc = set()
-            cube = curve.proto[i]
-            next_cube = curve.proto[i+1]
-            delta = tuple(nc-c for nc, c in zip(next_cube, cube))
-            base_junc = Junction(delta, curve.base_maps[i], curve.base_maps[i+1])
-            seen_junc.add(base_junc)
-
-            to_derive = [base_junc]
-            while to_derive:
-                junc = to_derive.pop()
-                dj = curve.get_derived_junction(junc)
-                if dj not in seen_junc:
-                    seen_junc.add(dj)
-                    to_derive.append(dj)
-
-            for junc in seen_junc:
-                if junc not in junc_curves:
-                    junc_curves[junc] = []
-                junc_curves[junc].append(curve)
+        for cnum, curve in configs:
+            base_junc = curve.get_base_junction(cnum)
+            for junc in curve.gen_junctions_from_base([base_junc]):
+                junc_curves.setdefault(junc, []).append(curve)
 
         return junc_curves
 
+    def get_base_junction(self, cnum):
+        delta = [c2j - c1j for c1j, c2j in zip(self.proto[cnum], self.proto[cnum + 1])]
+        return Junction(delta, self.base_maps[cnum], self.base_maps[cnum + 1])
+
+    # возвращает стыки вместе с производными
+    def gen_junctions_from_base(self, base_juncs):
+        for junc in base_juncs:
+            yield junc
+        seen = set(base_juncs)
+        to_derive = list(base_juncs)
+        while to_derive:
+            junc = to_derive.pop()
+            dj = self.get_derived_junction(junc)
+            if dj not in seen:
+                yield dj
+                seen.add(dj)
+                to_derive.append(dj)
+
     def get_derived_junction(self, junc):
-        if self.base_maps[0] is None or self.base_maps[-1] is None:
-            raise Exception("Can't get derivative")
         base_map = junc.base_map
-        cube1 = self.proto[-1]
-        cube2 = base_map.apply_cube(self.div, self.proto[0])
-        der_delta = tuple(junc.delta_x[k]*self.div + cube2[k] - cube1[k] for k in range(self.dim))
-        return Junction(der_delta, self.base_maps[-1], base_map * self.base_maps[0])
+        cnum1 = 0 if junc.time_rev else -1
+        cnum2 = -1 if base_map.time_rev else 0
+
+        if self.base_maps[cnum1] is None or self.base_maps[cnum2] is None:
+            raise Exception("Can't get derivative: base_map not defined")
+
+        cube1 = self.proto[cnum1]
+        bm1 = self.base_maps[cnum1]
+        if junc.time_rev:
+            bm1 = bm1.reverse_time()
+
+        cube2 = base_map.apply_cube(self.div, self.proto[cnum2])
+        bm2 = base_map * self.base_maps[cnum2]
+
+        der_delta = tuple(c2j + dxj * self.div - c1j for c1j, c2j, dxj in zip(cube1, cube2, junc.delta_x))
+
+        return Junction(der_delta, bm1, bm2)
 
 # стык двух фракций кривой
-# всегда приводим к стандартному виду, когда первая фракция в стандартной ориентации
+# всегда приводим к стандартному виду:
+# первая фракция стандартной пространственной ориентации, но, возможно, с обращением времени (self.time_rev)
+# вторая фракция в ориентации self.base_map
+# куб второй фракции получается из куба первого сдвигом на delta_x \in {0,1,-1}^d
 class Junction:
     def __init__(self, delta, bm1, bm2):
-        assert not bm1.time_rev and not bm2.time_rev
-        bm1_inv = bm1.inverse()
-        self.delta_x = bm1_inv.apply_vec(delta)
-        self.base_map = bm1_inv * bm2
+        bm1_cube_inv = bm1.cube_map().inverse()
+        self.base_map = bm1_cube_inv * bm2
+        self.delta_x = bm1_cube_inv.apply_vec(delta)
+        self.time_rev = bm1.time_rev
 
     def _data(self):
-        return (self.delta_x, self.base_map)
+        return (self.delta_x, self.time_rev, self.base_map)
 
     def __eq__(self, other):
         return self._data() == other._data()
@@ -253,8 +379,14 @@ class Junction:
     def __hash__(self):
         return hash(self._data())
 
+    def __repr__(self):
+        return '1: ' + ('t->1-t' if self.time_rev else '') + ', 2: ' + str(self.base_map) + ', --> ' + str(self.delta_x)
+
 
 # вся инфа о положении фракции в кривой
+# cnums - последовательность номеров кубов
+# cubes - последовательность кубов
+# каждый куб - для той кривой, которая в соотв. фракции
 class CurvePiecePosition:
     def __init__(self, dim, div, cnums, cubes):
         self.dim = dim
@@ -272,11 +404,11 @@ class CurvePiecePosition:
         )
 
     # естественные целочисленные координаты - время и нулевой угол куба
-    # int time: [t, t+1], abs time: [t/G^l, (t+1)/G^l]
+    # int time: t - время, умноженное на G^l, кусок - [t, t+1], abs time: [t/G^l, (t+1)/G^l]
     # int cube: cj <= xj <= cj+1, abs cube: cj/N^l <= xj <= (cj+1)/N^l
     # int curve: [0, N**l]^d, abs curve: [0,1]^d
     # l = depth
-    # возвращает [l,x,t]
+    # возвращает l,x,t
     def get_int_coords(self):
         return (
             self.depth,
@@ -290,45 +422,36 @@ class CurvePiece:
         self.curve = curve
         self.pos = pos
 
-    def prev_map(self):
-        if not hasattr(self, '_prev_map'):
-            self._prev_map = self.get_prev_map()
-        return self._prev_map
-
-    # TODO: comment
-    # в последнем кубе ориентация не задана!
-    def get_prev_map(self):
-        prev_map = BaseMap(dim=self.curve.dim)
-        for cnum in self.pos.cnums[:-1]:
-            prev_map = prev_map * self.curve.base_maps[cnum]  # именно в таком порядке!
-        return prev_map
-
     # делим кривую дальше всеми способами
     def divide(self):
-        # определим ориентацию предпоследнего кусочка
+        curve = self.curve
+        dim, G = curve.dim, curve.genus
 
-        prev_map = self.prev_map()
-        prev_curve = self.curve.apply_base_map(prev_map)
+        # определим ориентацию предпоследнего кусочка
+        # в последнем кубе ориентация не задана!
+        prev_map = BaseMap.id_map(dim)
+        for cnum in self.pos.cnums[:-1]:
+            cnum = prev_map.apply_cnum(G, cnum)
+            prev_map = prev_map * curve.base_maps[cnum]  # именно в таком порядке!
+
+        prev_curve = curve.apply_base_map(prev_map)
 
         active_cnum = self.pos.cnums[-1]  # кубик, где всё происходит
-        allowed_maps = prev_curve.get_allowed_maps(active_cnum)
+        spec_cnum = prev_map.apply_cnum(G, active_cnum)
 
         # делим
-        new_pieces = []
-        for bm in allowed_maps:
+        for bm in prev_curve.gen_allowed_maps(active_cnum):
             last_curve = prev_curve.apply_base_map(bm)
 
             # сопряжение, как в apply:
-            # для prev_map.base_maps[active_cnum] = bm =>  orig_curve.base_maps[active_cnum] = ...
+            # для prev_map.base_maps[active_cnum] = bm =>  orig_curve.base_maps[spec_cnum] = ...
             new_map = prev_map.inverse() * bm * prev_map
-            specified_curve = self.curve.specify(active_cnum, new_map)
+            specified_curve = curve.specify(spec_cnum, new_map)
 
             for cnum, cube in enumerate(last_curve.proto):
                 new_pos = self.pos.specify(cnum, cube)
                 new_piece = CurvePiece(specified_curve, new_pos)
-                new_pieces.append(new_piece)
-
-        return new_pieces
+                yield new_piece
 
 
 class CurvePieceBalancedPair:
@@ -345,15 +468,12 @@ class CurvePieceBalancedPair:
     def divide(self):
         # при делении кусочка у него уточняется кривая, поэтому берём кривую из него
         # решаем, кого делить
-        new_pairs = []
         if self.pos1.depth > self.pos2.depth:
             for subpiece in self.piece2.divide():
-                new_pairs.append(type(self)(subpiece.curve, self.junc, self.pos1, subpiece.pos))
+                yield type(self)(subpiece.curve, self.junc, self.pos1, subpiece.pos)
         else:
             for subpiece in self.piece1.divide():
-                new_pairs.append(type(self)(subpiece.curve, self.junc, subpiece.pos, self.pos2))
-
-        return new_pairs
+                yield type(self)(subpiece.curve, self.junc, subpiece.pos, self.pos2)
 
     # пространственные и временные расстояния
     def int_dist(self):
@@ -369,16 +489,23 @@ class CurvePieceBalancedPair:
         l1, x1, t1 = self.pos1.get_int_coords()
         l2, x2, t2 = self.pos2.get_int_coords()
 
-        if self.junc is None:
+        junc = self.junc
+        if junc is None:
             junc_dt = 0
             junc_dx = (0,) * dim
         else:
             junc_dt = 1
             junc_dx = self.junc.delta_x
-            junc_bm = self.junc.base_map
-            # junc: сначала поворот
-            x2 = junc_bm.apply_cube(N**l2, x2)
 
+            # junc: time_rev
+            if junc.time_rev:
+                t1 = G**l1 - 1 - t1
+
+            # junc: сначала поворот
+            x2 = junc.base_map.apply_cube(N**l2, x2)
+            t2 = junc.base_map.apply_cnum(G**l2, t2)
+
+        # приведение к единому масштабу
         if l1 == l2:
             mx2 = mt2 = 1
         elif l1 == l2 + 1:
@@ -394,7 +521,10 @@ class CurvePieceBalancedPair:
 
         # мы привели целые координаты к следующим:
         # cube1: x1j <= xj <= x1j + 1         -- кубик внутри кривой [0, mx]^d
-        # cube2: x2j <= xj <= x2j + mx2  -- кубик внутри кривой [0, mx2 * mx]^d
+        # cube2: x2j <= xj <= x2j + mx2  -- кубик внутри кривой [0, mx2 * mx]^d, + сдвиг на junc_dx * mx
+        #
+        # time1: t1 <= t <= t1 + 1
+        # time2: t2 <= t <= t2 + mt2, после сдвига: t2 + junc_dt * mt <= t <= t2 + mt2 + junc_dt * mt
 
         max_dx = [None] * dim
         for j in range(dim):
@@ -406,8 +536,9 @@ class CurvePieceBalancedPair:
             dxj = max(abs(x1j - x2j + 1), abs(x1j - x2j - mx2))
             max_dx[j] = dxj
 
-        min_dt = junc_dt * mt + t2 - (t1 + 1)
-        max_dt = junc_dt * mt + (t2 + mt2) - t1
+        max_dt = t2 + junc_dt * mt + mt2 - t1  # max(t_2 - t_1)
+        min_dt = t2 + junc_dt * mt - (t1 + 1)  # min(t_2 - t_1)
+
         return {'max_dx': max_dx, 'min_dt': min_dt, 'max_dt': max_dt}
 
     def upper_bound(self, ratio_func):
@@ -417,5 +548,3 @@ class CurvePieceBalancedPair:
     def lower_bound(self, ratio_func):
         dist = self.int_dist()
         return FastFraction(*ratio_func(self.curve.dim, dist['max_dx'], dist['max_dt']))
-
-

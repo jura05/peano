@@ -48,6 +48,14 @@ class FractalCurve(PartialFractalCurve):
 
     def get_dim(self):
         return len(self.proto[0])
+
+    def changed(self, proto=None, base_maps=None):
+        return type(self)(
+            dim=self.dim,
+            div=self.div,
+            proto=(proto if proto is not None else self.proto),
+            base_maps=(base_maps if base_maps is not None else self.base_maps),
+        )
     
     #
     # Работа с базовыми преобразованиями и фракциями
@@ -114,7 +122,7 @@ class FractalCurve(PartialFractalCurve):
     def _get_cubes(self, cnum):
         # находим последовательность вложенных кубов, которая получится, если в каждой фракции брать куб с номером cnum
         # возвращает пару (непериодическая часть, периодическая часть)
-        cur_map = BaseMap(dim=self.dim)  # current curve = cur_map * self
+        cur_map = BaseMap.id_map(self.dim)  # current curve = cur_map * self
         cubes = []
         index = {}
 
@@ -194,7 +202,7 @@ class FractalCurve(PartialFractalCurve):
         E.g., tuples (0,0,0) or (0,1,1) define vertices
         """
         curve = self
-        cur_map = BaseMap(dim=self.dim)  # curve = cur_map * self
+        cur_map = BaseMap.id_map(self.dim)  # curve = cur_map * self
         cnums = []
         index = {}
         while True:
@@ -294,8 +302,8 @@ class FractalCurve(PartialFractalCurve):
                 raise Exception(msg)
 
     @classmethod
-    def get_possible_curves(cls, curve):
-        bm_variants = [curve.get_allowed_maps(cnum) for cnum in range(curve.genus)]
+    def gen_possible_curves(cls, curve):
+        bm_variants = [curve.gen_allowed_maps(cnum) for cnum in range(curve.genus)]
         for base_maps in itertools.product(*bm_variants):
             yield cls(
                 dim=curve.dim,
@@ -305,21 +313,23 @@ class FractalCurve(PartialFractalCurve):
             )
 
     def forget(self):
-        curve_entrance = self.get_entrance()
+        curve_entr = self.get_entrance()
         curve_exit = self.get_exit()
 
         # не создаём дробные ворота!
         def fix(x):
             return int(x) if x == int(x) else x
 
-        curve_entrance = tuple(fix(ce) for ce in curve_entrance)
+        curve_entr = tuple(fix(ce) for ce in curve_entr)
         curve_exit = tuple(fix(ce) for ce in curve_exit)
 
         gates = []
         for bm in self.base_maps:
-            new_entrance = bm.apply_x(curve_entrance)
+            new_entr = bm.apply_x(curve_entr)
             new_exit = bm.apply_x(curve_exit)
-            gates.append((new_entrance, new_exit))
+            if bm.time_rev:
+                new_entr, new_exit = new_exit, new_entr
+            gates.append((new_entr, new_exit))
 
         return PartialFractalCurve(
             dim=self.dim,
@@ -330,31 +340,15 @@ class FractalCurve(PartialFractalCurve):
         )
 
     #
-    # Стыки. Реализовано для кривых без обращения времени
+    # Стыки.
     #
 
+    def gen_junctions(self):
+        base_junctions = set(self.get_base_junction(cnum) for cnum in range(self.genus - 1))
+        yield from self.gen_junctions_from_base(base_junctions)
+
     def get_junctions(self):
-        """Junction is a pair (delta, base_map). Get all junctions of a curve."""
-        if any(bm.time_rev for bm in self.base_maps):
-            raise Exception("get_junctions not implemented for time reverse!")
-
-        junctions = set()
-
-        for i in range(self.genus-1):
-            cube = self.proto[i]
-            next_cube = self.proto[i+1]
-            delta = tuple(nc-c for nc, c in zip(next_cube, cube))
-            junctions.add(Junction(delta, self.base_maps[i], self.base_maps[i+1]))
-
-        to_derive = list(junctions)
-        while to_derive:
-            junction = to_derive.pop()
-            dj = self.get_derived_junction(junction)
-            if dj not in junctions:
-                junctions.add(dj)
-                to_derive.append(dj)
-
-        return junctions
+        return list(self.gen_junctions())
 
     #
     # Показатели гладкости кривой
@@ -477,6 +471,55 @@ class FractalCurve(PartialFractalCurve):
 
         return pairs
 
+    def estimate_ratio_simple(self, ratio_func, subdivision=0):
+        curve = self.get_subdivision(subdivision) if subdivision > 0 else self
+            
+        # TODO заменить на gates!
+        max_r = None
+        pcurve = curve.forget()
+        data = zip(range(pcurve.genus), pcurve.proto, pcurve.gates)
+        for pair in itertools.combinations(data, 2):
+            cnum1, cube1, gate1 = pair[0]
+            cnum2, cube2, gate2 = pair[1]
+
+            t1 = cnum1  # only entrance
+            x1 = [cube1j + entr1j for cube1j, entr1j in zip(cube1, gate1[0])]
+
+            t2 = cnum2  # only entrance
+            x2 = [cube2j + entr2j for cube2j, entr2j in zip(cube2, gate2[0])]
+
+            dx = [x1j - x2j for x1j, x2j in zip(x1, x2)]
+
+            r = FastFraction(*ratio_func(self.dim, dx, t2 - t1))
+            if max_r is None or r > max_r:
+                print('max_r:', max_r)
+                max_r = r
+
+        return max_r
+
+    def estimate_ratio_vertex_brkline(self, ratio_func, subdivision=0):
+        curve = self.get_subdivision(subdivision) if subdivision > 0 else self
+            
+        # TODO заменить на gates!
+        max_r = None
+        pcurve = curve.forget()
+        data = zip(range(pcurve.genus), pcurve.proto, pcurve.gates)
+        for pair in itertools.combinations(curve.get_vertex_brkline(), 2):
+            x1, t1 = pair[0]
+            x2, t2 = pair[1]
+            if t1 == t2:
+                continue
+
+            dx = [x1j - x2j for x1j, x2j in zip(x1, x2)]
+
+            num, denum = ratio_func(self.dim, dx, t2 - t1)
+            r = float(num / denum)
+            if max_r is None or r > max_r:
+                print('max_r:', max_r, flush=True)
+                max_r = r
+
+        return max_r
+
     def estimate_ratio(self, ratio_func, junctions=None, upper_bound=None, max_iter=None, rel_tol=None, find_argmax=False, verbose=0):
         """Estimate ratio of a curve for given junctions.
         Params:
@@ -543,7 +586,7 @@ class FractalCurve(PartialFractalCurve):
             if junc is None:
                 delta_x = (0,) * d
                 delta_t = 0
-                junc_base_map = BaseMap(dim=self.dim)
+                junc_base_map = BaseMap.id_map(self.dim)
             else:
                 delta_x, junc_base_map = junc.delta_x, junc.base_map
                 delta_t = 1

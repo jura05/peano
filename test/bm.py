@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import unittest
 
 import sys
@@ -18,6 +20,7 @@ class TestBaseMap(unittest.TestCase):
     def test_inv(self):
         bm = BaseMap(perm=[3,2,1,0], flip=[True,True,True,True])
         self.assertEqual(bm * bm.inverse(), BaseMap(dim=4))
+        self.assertEqual(bm, bm.reverse_time().reverse_time())
 
 
 class TestPieceMap(unittest.TestCase):

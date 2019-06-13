@@ -3,7 +3,7 @@ import itertools
 
 from pysat.solvers import *
 
-from fractal_curve import FractalCurve
+import fractal_curve
 from base_map import gen_base_maps
 
 # clause = {var: True|False}
@@ -38,7 +38,7 @@ class CurveSATAdapter:
     def init_curve(self, curve):
         # возможные base_map-ы:
         for cnum in range(curve.genus):
-            self.make_only([self.get_bm_var(cnum, bm) for bm in curve.get_allowed_maps(cnum)])
+            self.make_only([self.get_bm_var(cnum, bm) for bm in curve.gen_allowed_maps(cnum)])
 
         # стыки
         for junc, curves in curve.get_junctions_info().items():
@@ -134,9 +134,8 @@ class CurveSATAdapter:
         base_maps = []
         allowed_by_model_variants = []
         for cnum in range(curve.genus):
-            allowed_maps = curve.get_allowed_maps(cnum)
             allowed_by_model = []
-            for bm in allowed_maps:
+            for bm in curve.gen_allowed_maps(cnum):
                 bm_var = self.get_bm_var(cnum, bm)
                 if (bm_var not in model) or model[bm_var]:
                     allowed_by_model.append(bm)
@@ -146,10 +145,9 @@ class CurveSATAdapter:
 
         full_curves = []
         for base_maps in itertools.product(*allowed_by_model_variants):
-            full_curve = FractalCurve(dim=curve.dim, div=curve.div, proto=curve.proto, base_maps=base_maps)
-            juncs = full_curve.get_junctions()
+            full_curve = fractal_curve.FractalCurve(dim=curve.dim, div=curve.div, proto=curve.proto, base_maps=base_maps)
             has_bad_juncs = False
-            for junc in juncs:
+            for junc in full_curve.gen_junctions():
                 junc_var = self.get_junc_var(junc)
                 if junc_var in model and not model[junc_var]:
                     # bad curve

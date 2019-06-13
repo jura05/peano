@@ -12,8 +12,8 @@ def get_hilbert_curve():
         proto=[(0, 0), (0, 1), (1, 1), (1, 0)],
         base_maps=[
             BaseMap([1, 0], [False, False]),  # (x,y)->(y,x)
-            BaseMap(dim=2),                   # (x,y)->(x,y)
-            BaseMap(dim=2),                   # (x,y)->(x,y)
+            BaseMap.id_map(2),                # (x,y)->(x,y)
+            BaseMap.id_map(2),                # (x,y)->(x,y)
             BaseMap([1, 0], [True, True]),    # (x,y)->(1-y,1-x)
         ],
     )
@@ -21,7 +21,7 @@ def get_hilbert_curve():
 
 def get_peano_curve():
     """Example of fractal curve due to G.Peano."""
-    id_map = BaseMap(dim=2)
+    id_map = BaseMap.id_map(2)
     x_map = BaseMap([0, 1], [True, False])  # (x,y)->(1-x,y)
     y_map = BaseMap([0, 1], [False, True])  # (x,y)->(x,1-y)
     xy_map = BaseMap([0, 1], [True, True])  # (x,y)->(1-x,1-y)
@@ -35,7 +35,7 @@ def get_peano_curve():
     )
 
 def get_peano5_curve():
-    id_map = BaseMap(dim=2)
+    id_map = BaseMap.id_map(2)
     x_map = BaseMap([0, 1], [True, False])  # (x,y)->(1-x,y)
     y_map = BaseMap([0, 1], [False, True])  # (x,y)->(x,1-y)
     xy_map = BaseMap([0, 1], [True, True])  # (x,y)->(1-x,1-y)
@@ -132,24 +132,51 @@ def get_tokarev_curve():
 
 
 # Testing sample
+# TODO: добавить более наглядный rev
 def get_rev_curve():
-    """Curve with time reversal."""
+    """Curve with time reversal at some middle cube."""
     return FractalCurve(
         proto=[(0, 0), (0, 1), (1, 1), (1, 0)],
         base_maps=[
             BaseMap([1, 0], [False, False]),                # (x,y)->(y,x)
-            BaseMap([0, 1], [True, False], time_rev=True),  # (x,y)->(1-x,y), t->-t
-            BaseMap(dim=2),                                 # (x,y)->(x,y)
+            BaseMap([0, 1], [True, False], time_rev=True),  # (x,y)->(1-x,y), t->1-t
+            BaseMap.id_map(2),                              # (x,y)->(x,y)
             BaseMap([1, 0], [True, True]),                  # (x,y)->(1-y,1-x)
         ],
     )
+
+def get_rev2_curve():
+    """Curve with time reversal at first cube."""
+    return FractalCurve(
+        proto=[(0, 0), (0, 1), (1, 1), (1, 0)],
+        base_maps=[
+            BaseMap([1, 0], [False, True], time_rev=True),  # (x,y)->(y,1-x), t->1-t
+            BaseMap.id_map(2),                              # (x,y)->(x,y)
+            BaseMap.id_map(2),                              # (x,y)->(x,y)
+            BaseMap([1, 0], [True, True]),                  # (x,y)->(1-y,1-x)
+        ],
+    )
+
+def get_rev3_curve():
+    """Curve with time reversal at last cube."""
+    return FractalCurve(
+        proto=[(0, 0), (0, 1), (1, 1), (1, 0)],
+        base_maps=[
+            BaseMap([1, 0], [False, False]),                # (x,y)->(y,x)
+            BaseMap.id_map(2),                              # (x,y)->(x,y)
+            BaseMap.id_map(2),                              # (x,y)->(x,y)
+            BaseMap([1, 0], [True, False], time_rev=True),  # (x,y)->(1-y,x), t->1-t
+        ],
+    )
+
+# TODO: rev4
 
 
 # Discontinuous curve - beginning in square center
 def get_discontinuous_curve():
     return FractalCurve(
         proto=[(1, 1), (0, 1), (0, 0), (1, 0), (2, 0), (2, 1), (2, 2), (1, 2), (0, 2)],
-        base_maps=[BaseMap(dim=2)] * 9,
+        base_maps=[BaseMap.id_map(2)] * 9,
     )
 
 # Discontinuous curve
