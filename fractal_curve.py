@@ -8,7 +8,7 @@ from math import gcd
 from collections import Counter
 
 from base_map import BaseMap, PieceMap
-from partial_fractal_curve import PartialFractalCurve, Junction
+from partial_fractal_curve import PartialFractalCurve, Junction, PairsTree
 
 
 class FractalCurve(PartialFractalCurve):
@@ -354,6 +354,106 @@ class FractalCurve(PartialFractalCurve):
     # Показатели гладкости кривой
     #
 
+    def estimate_ratio_simple(self, ratio_func, subdivision=0):
+        curve = self.get_subdivision(subdivision) if subdivision > 0 else self
+            
+        # TODO заменить на gates!
+        max_r = None
+        pcurve = curve.forget()
+        data = zip(range(pcurve.genus), pcurve.proto, pcurve.gates)
+        for pair in itertools.combinations(data, 2):
+            cnum1, cube1, gate1 = pair[0]
+            cnum2, cube2, gate2 = pair[1]
+
+            t1 = cnum1  # only entrance
+            x1 = [cube1j + entr1j for cube1j, entr1j in zip(cube1, gate1[0])]
+
+            t2 = cnum2  # only entrance
+            x2 = [cube2j + entr2j for cube2j, entr2j in zip(cube2, gate2[0])]
+
+            dx = [x1j - x2j for x1j, x2j in zip(x1, x2)]
+
+            r = FastFraction(*ratio_func(self.dim, dx, t2 - t1))
+            if max_r is None or r > max_r:
+                print('max_r:', max_r)
+                max_r = r
+
+        return max_r
+
+    def estimate_ratio_vertex_brkline(self, ratio_func, subdivision=0):
+        curve = self.get_subdivision(subdivision) if subdivision > 0 else self
+            
+        # TODO заменить на gates!
+        max_r = None
+        pcurve = curve.forget()
+        data = zip(range(pcurve.genus), pcurve.proto, pcurve.gates)
+        for pair in itertools.combinations(curve.get_vertex_brkline(), 2):
+            x1, t1 = pair[0]
+            x2, t2 = pair[1]
+            if t1 == t2:
+                continue
+
+            dx = [x1j - x2j for x1j, x2j in zip(x1, x2)]
+
+            num, denum = ratio_func(self.dim, dx, t2 - t1)
+            r = float(num / denum)
+            if max_r is None or r > max_r:
+                print('max_r:', max_r, flush=True)
+                max_r = r
+
+        return max_r
+
+    def init_pairs_tree(self):
+        juncs = set(self.gen_junctions())
+        for pair in super().init_pairs_tree():
+            if pair.junc is None or pair.junc in juncs:
+                yield pair
+
+    def estimate_ratio_new(self, ratio_func, rel_tol=0.01, max_iter=10**6, verbose=False):
+        curr_up = None
+        curr_lo = 0
+
+        pairs_tree = PairsTree(ratio_func)
+
+        for pair in self.init_pairs_tree():
+            pairs_tree.add_pair(pair)
+
+        curr_lo = max(float(t[-1]['lo']) for t in pairs_tree.data)
+        curr_up = float(pairs_tree.data[0][-1]['up'])
+
+        pairs_tree.set_good_threshold(curr_lo)
+
+        for it in range(1, max_iter + 1):
+            if not pairs_tree.data:
+                break
+            
+            for pair in pairs_tree.divide():
+                pairs_tree.add_pair(pair)
+
+            new_lo = max(float(t[-1]['lo']) for t in pairs_tree.data)
+            if new_lo > curr_lo:
+                if verbose:
+                    print('new lower bound: ', new_lo, curr_up)
+                curr_lo = new_lo
+            pairs_tree.set_good_threshold(curr_lo)
+
+            new_up = float(pairs_tree.data[0][-1]['up'])
+            if new_up < curr_up:
+                if verbose:
+                    print('new upper bound: ', curr_lo, new_up)
+                curr_up = new_up
+
+            if curr_up < curr_lo * (1 + rel_tol):
+                break
+
+        return {'up': curr_up, 'lo': curr_lo}
+
+#
+#  OLD CODE 
+#
+#  DEPRECATED
+#
+
     class CurveBalancedPair:
         # работаем с парой фракций кривой
         # первую приводим к стандартной ориентации (как для стыка)
@@ -471,54 +571,7 @@ class FractalCurve(PartialFractalCurve):
 
         return pairs
 
-    def estimate_ratio_simple(self, ratio_func, subdivision=0):
-        curve = self.get_subdivision(subdivision) if subdivision > 0 else self
-            
-        # TODO заменить на gates!
-        max_r = None
-        pcurve = curve.forget()
-        data = zip(range(pcurve.genus), pcurve.proto, pcurve.gates)
-        for pair in itertools.combinations(data, 2):
-            cnum1, cube1, gate1 = pair[0]
-            cnum2, cube2, gate2 = pair[1]
 
-            t1 = cnum1  # only entrance
-            x1 = [cube1j + entr1j for cube1j, entr1j in zip(cube1, gate1[0])]
-
-            t2 = cnum2  # only entrance
-            x2 = [cube2j + entr2j for cube2j, entr2j in zip(cube2, gate2[0])]
-
-            dx = [x1j - x2j for x1j, x2j in zip(x1, x2)]
-
-            r = FastFraction(*ratio_func(self.dim, dx, t2 - t1))
-            if max_r is None or r > max_r:
-                print('max_r:', max_r)
-                max_r = r
-
-        return max_r
-
-    def estimate_ratio_vertex_brkline(self, ratio_func, subdivision=0):
-        curve = self.get_subdivision(subdivision) if subdivision > 0 else self
-            
-        # TODO заменить на gates!
-        max_r = None
-        pcurve = curve.forget()
-        data = zip(range(pcurve.genus), pcurve.proto, pcurve.gates)
-        for pair in itertools.combinations(curve.get_vertex_brkline(), 2):
-            x1, t1 = pair[0]
-            x2, t2 = pair[1]
-            if t1 == t2:
-                continue
-
-            dx = [x1j - x2j for x1j, x2j in zip(x1, x2)]
-
-            num, denum = ratio_func(self.dim, dx, t2 - t1)
-            r = float(num / denum)
-            if max_r is None or r > max_r:
-                print('max_r:', max_r, flush=True)
-                max_r = r
-
-        return max_r
 
     def estimate_ratio(self, ratio_func, junctions=None, upper_bound=None, max_iter=None, rel_tol=None, find_argmax=False, verbose=0):
         """Estimate ratio of a curve for given junctions.
@@ -552,7 +605,7 @@ class FractalCurve(PartialFractalCurve):
             raise Exception("Define max_iter or rel_tol!")
 
         if junctions is None:
-            junctions = self.get_junctions()
+            junctions = set(self.gen_junctions())
             junctions.add(None)
 
         d = self.dim

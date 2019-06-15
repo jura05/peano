@@ -130,7 +130,7 @@ class CurveSATAdapter:
             model[var] = (int_tok > 0)
         return model
 
-    def get_curves_from_model(self, curve, model):
+    def get_curve_from_model(self, curve, model):
         base_maps = []
         allowed_by_model_variants = []
         for cnum in range(curve.genus):
@@ -140,10 +140,9 @@ class CurveSATAdapter:
                 if (bm_var not in model) or model[bm_var]:
                     allowed_by_model.append(bm)
             if not allowed_by_model:
-                return None
+                return
             allowed_by_model_variants.append(allowed_by_model)
 
-        full_curves = []
         for base_maps in itertools.product(*allowed_by_model_variants):
             full_curve = fractal_curve.FractalCurve(dim=curve.dim, div=curve.div, proto=curve.proto, base_maps=base_maps)
             has_bad_juncs = False
@@ -153,13 +152,10 @@ class CurveSATAdapter:
                     # bad curve
                     has_bad_juncs = True
                     break
-            if has_bad_juncs:
-                continue
             # структура задачи такова, что достаточно проверить отсутствие плохих стыков!
             # в будущем можно также учесть стыки, не входящие в кривую
-            full_curves.append(full_curve)
-
-        return full_curves
+            if not has_bad_juncs:
+                return full_curve
 
     # для отладки
 #    def get_model_from_curve(self, curve):

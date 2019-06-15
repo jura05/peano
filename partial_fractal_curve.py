@@ -2,12 +2,12 @@ import time
 from fractions import Fraction
 import itertools
 from functools import lru_cache
-from collections import Counter
+from collections import Counter, namedtuple
 from heapq import heappop, heappush
 
 from fast_fractions import FastFraction
-from base_map import BaseMap, constraint_base_maps, gen_constraint_cube_maps
-from curve_sat_adapter import CurveSATAdapter
+from base_map import BaseMap, gen_constraint_cube_maps
+import curve_sat_adapter 
 
 
 @lru_cache(maxsize=2**20)
@@ -177,47 +177,17 @@ class PartialFractalCurve:
     def is_specialization(self, tmpl):
         return all(self.base_maps[cnum] == bm for cnum, bm in tmpl.bm_info().items())
 
-    # lower_bound - если кривая хуже этой границы - нам не подходит
-    # upper_bound - если кривая лучше - нам подходит
-    def estimate_ratio(self, ratio_func, lower_bound, upper_bound, max_iter=10**6, sat_pack=10, find_model=False):
-        adapter = CurveSATAdapter(dim=self.dim)
-        adapter.init_curve(self)
-        stats = Counter()
+    #
+    # Про отношение
+    #
 
-        active_pairs = []
-        bads = []
-        def add_pair(pair):
-            stats['iter_count'] += 1
-            up = pair.upper_bound(ratio_func)
-
-            if float(up) < upper_bound:
-                # Not interesed
-                stats['good'] += 1
-                return
-
-            lo = pair.lower_bound(ratio_func)
-            if float(lo) > lower_bound:
-                bads.append(pair)
-                # found zapret
-                stats['good'] += 1
-                stats['bad'] += 1
-                return
-
-            priority = -float(up)
-            heappush(active_pairs, (priority, stats['iter_count'], {'pair': pair, 'up': up, 'lo': lo}))
-
-        def forbid(bad_pairs):
-            while bad_pairs:
-                bad_pair = bad_pairs.pop()
-                adapter.add_forbid_clause(bad_pair.junc, bad_pair.curve)
-
+    def init_pairs_tree(self):
         G = self.genus
         for cnum1 in range(G):
             for cnum2 in range(cnum1 + 2, G):
                 pos1 = self.get_piece_position(cnum1)
                 pos2 = self.get_piece_position(cnum2)
-                pair = CurvePieceBalancedPair(self, None, pos1, pos2)
-                add_pair(pair)
+                yield CurvePieceBalancedPair(self, None, pos1, pos2)
 
         for junc in self.get_junctions_info().keys():
             last_cnum1 = 0 if junc.time_rev else G - 1
@@ -228,60 +198,64 @@ class PartialFractalCurve:
                         continue
                     pos1 = self.get_piece_position(cnum1)
                     pos2 = self.get_piece_position(cnum2)
-                    pair = CurvePieceBalancedPair(self, junc, pos1, pos2)
-                    add_pair(pair)
+                    yield CurvePieceBalancedPair(self, junc, pos1, pos2)
 
-        no_model = None
+    # upper_bound - если кривая лучше - нам подходит
+    def estimate_ratio(self, ratio_func, lower_bound, upper_bound, max_iter=10**6, log_pack=100, sat_pack=100, find_model=False):
+        adapter = curve_sat_adapter.CurveSATAdapter(dim=self.dim)
+        adapter.init_curve(self)
+
+        pairs_tree = PairsTree(ratio_func)
+        pairs_tree.set_good_threshold(upper_bound)
+        pairs_tree.set_bad_threshold(lower_bound)
+
+        for pair in self.init_pairs_tree():
+            pairs_tree.add_pair(pair)
+
         it = 0
-        while active_pairs and it < max_iter:
+        while it < max_iter:
             it += 1
-            worst_item = heappop(active_pairs)[-1]
+            for pair in pairs_tree.divide():
+                pairs_tree.add_pair(pair)
+            while pairs_tree.bad_pairs:
+                bad_pair = pairs_tree.bad_pairs.pop()
+                adapter.add_forbid_clause(bad_pair.junc, bad_pair.curve)
+
+            if not pairs_tree.data:
+                break
+
+            worst_item = pairs_tree.data[0][-1]
             worst_pair = worst_item['pair']
 
-            if it % 1000 == 0:
+            if it % log_pack == 0:
                 print({
                     'iter': it,
-                    'pairs': len(active_pairs),
+                    'pairs': len(pairs_tree.data),
+                    'pqstats:': pairs_tree.stats,
                     'up': float(worst_item['up']),
                     'depth': (worst_pair.pos1.depth, worst_pair.pos2.depth),
                 })
-                print(stats)
 
-            for subpair in worst_pair.divide():
-                add_pair(subpair)
-
-            if it % sat_pack == 0 and bads:
-                start_time = time.time()
-                print('it:', it, 'adapter stats:', adapter.stats())
-                forbid(bads)
-                bads = []
+            if it % sat_pack == 0:
+                print('iter:', it, 'adapter stats:', adapter.stats())
                 if not adapter.solve():
-                    no_model = True
-                    break
+                    return False
 
-        if no_model:
-            print('NO SAT MODEL!')
-            return None
+        if it == max_iter:
+            print('used all iterations...')
+            return False
 
-        forbid(bads)
         if not adapter.solve():
-            print('NO SAT MODEL!')
-            return
+            print('no SAT model')
+            return False
 
-        print('SAT MODEL EXISTS!')
+        print('SAT model exists!')
         if not find_model:
             return True
 
         # это если попросят модель
         model = adapter.get_model()
-        found_curves = adapter.get_curves_from_model(self, model)
-        for found_curve in found_curves:
-            print('found curve:', found_curve.proto, found_curve.base_maps)
-            #res2 = found_curve.estimate_ratio(ratio, rel_tol=0.002, verbose=1)
-            #print(res2)
-            #print('FOUND upper bound:', str(res2['upper_bound']))
-
-        return True
+        return adapter.get_curve_from_model(self, model)
 
 
     #
@@ -394,6 +368,8 @@ class CurvePiecePosition:
         self.cnums = cnums
         self.cubes = cubes
         self.depth = len(self.cnums)
+        self.sub_div = div**self.depth
+        self.sub_genus = self.sub_div**dim
 
     def specify(self, cnum, cube):
         return type(self)(
@@ -486,8 +462,10 @@ class CurvePieceBalancedPair:
         N = self.curve.div
         G = self.curve.genus
 
-        l1, x1, t1 = self.pos1.get_int_coords()
-        l2, x2, t2 = self.pos2.get_int_coords()
+        pos1, pos2 = self.pos1, self.pos2
+
+        l1, x1, t1 = pos1.get_int_coords()
+        l2, x2, t2 = pos2.get_int_coords()
 
         junc = self.junc
         if junc is None:
@@ -499,11 +477,11 @@ class CurvePieceBalancedPair:
 
             # junc: time_rev
             if junc.time_rev:
-                t1 = G**l1 - 1 - t1
+                t1 = pos1.sub_genus - 1 - t1
 
             # junc: сначала поворот
-            x2 = junc.base_map.apply_cube(N**l2, x2)
-            t2 = junc.base_map.apply_cnum(G**l2, t2)
+            x2 = junc.base_map.apply_cube(pos2.sub_div, x2)
+            t2 = junc.base_map.apply_cnum(pos2.sub_genus, t2)
 
         # приведение к единому масштабу
         if l1 == l2:
@@ -516,8 +494,8 @@ class CurvePieceBalancedPair:
         else:
             raise Exception("Bad coordinates!")
 
-        mx = N**l1
-        mt = mx**dim
+        mx = pos1.sub_div
+        mt = pos1.sub_genus
 
         # мы привели целые координаты к следующим:
         # cube1: x1j <= xj <= x1j + 1         -- кубик внутри кривой [0, mx]^d
@@ -548,3 +526,59 @@ class CurvePieceBalancedPair:
     def lower_bound(self, ratio_func):
         dist = self.int_dist()
         return FastFraction(*ratio_func(self.curve.dim, dist['max_dx'], dist['max_dt']))
+
+# пары фракций с приоритетом
+class PairsTree:
+    def __init__(self, ratio_func):
+        self.data = []
+        self.stats = Counter()
+        self.bad_pairs = []
+        self.ratio_func = ratio_func
+        self._inc = 0
+        self.good_threshold = None  # если отношение <= порога, пара хорошая
+        self.bad_threshold = None  # если отношение > порога, пара плохая
+
+    def set_good_threshold(self, thr):
+        self.good_threshold = thr
+
+    def set_bad_threshold(self, thr):
+        self.bad_threshold = thr
+
+    def add_pair(self, pair):
+        self._inc += 1
+
+        up = pair.upper_bound(self.ratio_func)
+        gthr = self.good_threshold
+        if gthr is not None and float(up) < gthr:  # TOOD нет ли проблемы с округлением
+            self.stats['good'] += 1
+            return
+
+        lo = pair.lower_bound(self.ratio_func)
+        bthr = self.bad_threshold
+        if bthr is not None and float(lo) > bthr:
+            self.bad_pairs.append(pair)
+            self.stats['bad'] += 1
+            return
+
+        item = (-float(up), self._inc, {'pair': pair, 'up': up, 'lo': lo})
+        heappush(self.data, item)
+
+    # здесь нельзя делать генератор!
+    def divide(self):
+        pairs = []
+        if not self.data:
+            return pairs
+        worst_item = heappop(self.data)
+        worst_pair = worst_item[-1]['pair']
+        for pair in worst_pair.divide():
+            pairs.append(pair)
+
+        lo = max(pair.lower_bound(self.ratio_func) for pair in pairs)
+        if lo < worst_item[-1]['lo']:
+            raise Exception("WTF LO")
+
+        up = max(pair.upper_bound(self.ratio_func) for pair in pairs)
+        if up > worst_item[-1]['up']:
+            raise Exception("WTF UP")
+
+        return pairs

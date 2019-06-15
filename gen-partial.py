@@ -58,7 +58,7 @@ def perebor(conf):
             lower_bound=conf['lower_bound'],
             upper_bound=conf['upper_bound'],
             sat_pack=conf['sat_pack'],
-            find_model=True,
+            find_model=conf.get('find_model'),
         )
         if has_good:
             stats['found'] += 1
@@ -76,11 +76,11 @@ def pristalno():
         (2, 0), (3, 0), (3, 1), (4, 1), (4, 0),
     ]
     bmstrs = [
-        '(x,y)->(1-x,y),t->1-t', '(x,y)->(y,1-x),t->1-t', '(x,y)->(y,x)',           '(x,y)->(1-x,1-y)',     '(x,y)->(1-x,y),t->1-t',
-        '(x,y)->(y,1-x),t->1-t', '(x,y)->(y,x)',          '(x,y)->(1-x,1-y)',       '(x,y)->(1-x,y),t->1-t','(x,y)->(x,y)',
-        '(x,y)->(1-x,y),t->1-t', '(x,y)->(1-y,x),t->1-t', '(x,y)->(y,1-x),t->1-t',  '(x,y)->(1-x,y),t->1-t','(x,y)->(x,y)',
-        '(x,y)->(1-y,1-x)',      '(x,y)->(x,1-y),t ->1-t','(x,y)->(1-x,1-y)',       '(x,y)->(1-y,x),t->1-t','(x,y)->(1-y,1-x)',
-        '(x,y)->(1-y,x),t->1-t', '(x,y)->(y,1-x),t->1-t', '(x,y)->(1-x,y),t->1-t',  '(x,y)->(x,y)',         '(x,y)->(1-y,1-x)',
+        '(x,y)->(x,y)', '(x,y)->(y,1-x),t->1-t', '(x,y)->(y,1-x),t->1-t', '(x,y)->(1-x,1-y)', '(x,y)->(x,y)',
+        '(x,y)->(y,1-x),t->1-t', '(x,y)->(y,1-x),t->1-t', '(x,y)->(1-x,1-y)', '(x,y)->(x,y)', '(x,y)->(x,y)',
+        '(x,y)->(x,y)', '(x,y)->(1-y,x),t->1-t', '(x,y)->(y,1-x),t->1-t', '(x,y)->(x,y)', '(x,y)->(x,y)',
+        '(x,y)->(1-y,x),t->1-t', '(x,y)->(1-x,1-y)', '(x,y)->(1-x,1-y)', '(x,y)->(1-y,x),t->1-t', '(x,y)->(1-y,x),t->1-t',
+        '(x,y)->(1-y,x),t->1-t', '(x,y)->(y,1-x),t->1-t', '(x,y)->(x,y)', '(x,y)->(x,y)', '(x,y)->(1-y,x),t->1-t',
     ]
     base_maps = [bmstr2base_map(x) for x in bmstrs]
 
@@ -90,11 +90,15 @@ def pristalno():
     print('entr:', curve.get_entrance())
     print('exit:', curve.get_exit())
 
-    #curve.estimate_ratio_vertex_brkline(ratio_l2, 2)
+    curve.estimate_ratio_new(ratio_l2, rel_tol=0.001, max_iter=1000)
 
     pcurve = curve.forget()
     pcurve.allow_time_rev = True
-    pcurve.estimate_ratio(ratio_l2, lower_bound=31.2, upper_bound=31.3)
+    result = pcurve.estimate_ratio(ratio_l2, lower_bound=31.2, upper_bound=31.3, find_model=True)
+    if result:
+        print('found:', result.proto, result.base_maps)
+    else:
+        print('NOT FOUND')
 
 
 def bauman():
@@ -117,9 +121,10 @@ def bauman():
     bauman = bauman.get_subdivision(1)
     pcurve = bauman.forget()
     pcurve = pcurve.changed(allow_time_rev=True)
-    pcurve.estimate_ratio(ratio_l2, lower_bound=32.05, upper_bound=32.1, sat_pack=1000, find_model=True)
+    pcurve.estimate_ratio(ratio_l2, lower_bound=32.2, upper_bound=32.1, sat_pack=1000, find_model=True)
 
-# time=16s div=5{'threshold': 80,  'rel_tol': 0.01, 'sat_pack': 10, 'max_iter': 20},; Counter({'not_found': 11, 'found': 10})
+# Counter({'not_found': 11, 'found': 10})
+# time=16s
 def timings1():
     conf = {
         'dim': 2,
@@ -131,8 +136,27 @@ def timings1():
         'sat_pack': 10,
         'max_iter': 20,
         'allow_time_rev': False,
+        'find_model': False,
     }
     perebor(conf)
+
+# Counter({'not_found': 76, 'found': 25})
+# 53s
+def timings2():
+    conf = {
+        'dim': 2,
+        'div': 5,
+        'hdist': 2,
+        'max_cdist': 2,
+        'lower_bound': 80,
+        'upper_bound': 80.8,
+        'sat_pack': 10,
+        'max_iter': 100,
+        'allow_time_rev': False,
+        'find_model': False,
+    }
+    perebor(conf)
+    print(get_int_cube_with_cache.cache_info())
 
 if __name__ == "__main__":
     conf = {
@@ -146,6 +170,7 @@ if __name__ == "__main__":
         #'max_iter': 20,
         'allow_time_rev': True,
     }
+    timings2()
     #perebor(conf)
     #bauman()
-    pristalno()
+    #pristalno()
