@@ -28,6 +28,8 @@ class BaseMap:
         self.perm = tuple(perm)
         self.flip = tuple(bool(b) for b in flip)
         self.time_rev = bool(time_rev)
+        self._data = (self.perm, self.flip, self.time_rev)
+        self._hash = hash(self._data)
 
     @classmethod
     def id_map(cls, dim):
@@ -38,14 +40,11 @@ class BaseMap:
     def cube_map(self):
         return type(self)(self.perm, self.flip)
 
-    def _data(self):
-        return (self.perm, self.flip, self.time_rev)
-
     def __eq__(self, other):
-        return self._data() == other._data()
+        return self._data == other._data
 
     def __hash__(self):
-        return hash(self._data())
+        return self._hash
 
     def __repr__(self):
         if self.dim > 3:

@@ -36,48 +36,40 @@ def get_int_time_with_cache(dim, N, cnums):
 
 class PartialFractalCurve:
     # base_maps - list as in FractalCurve, may contain None
-    # gates - (relative entrance, relative exit) pairs  <=>  brkline
-    def __init__(self, dim, div, proto, base_maps, gates, allow_time_rev=False):
+    # repr_maps - список представителей (coset representatives) base_map-ов, которые сохраняют вход-выход
+    # symmetries - симметрии кривой
+    def __init__(self, dim, div, proto, base_maps, repr_maps, symmetries):
         self.dim = dim
         self.div = div
         self.proto = tuple(proto)
         self.base_maps = tuple(base_maps)
-        self.gates = tuple(gates)
-        self.allow_time_rev = allow_time_rev
+        self.repr_maps = tuple(repr_maps)
+        self.symmetries = tuple(symmetries)
         self.genus = self.div ** self.dim
 
     # создать кривую с другим прототипом/base_maps/whatever
-    def changed(self, proto=None, base_maps=None, gates=None, allow_time_rev=None):
+    def changed(self, proto=None, base_maps=None, repr_maps=None, symmetries=None):
         return type(self)(
             dim=self.dim,
             div=self.div,
             proto=(proto if proto is not None else self.proto),
             base_maps=(base_maps if base_maps is not None else self.base_maps),
-            gates=(gates if gates is not None else self.gates),
-            allow_time_rev=(allow_time_rev if allow_time_rev is not None else self.allow_time_rev),
+            repr_maps=(repr_maps if repr_maps is not None else self.repr_maps),
+            symmetries=(symmetries if symmetries is not None else self.symmetries),
         )
-
-    def get_entrance(self):
-        cube = self.proto[0]
-        rel_entrance = self.gates[0][0]
-        return tuple(Fraction(cube[j] + rel_entrance[j], self.div) for j in range(self.dim))
 
     def get_fraction(self, cnum):
         """Get fraction as a curve."""
         return self.apply_base_map(self.base_maps[cnum])
 
-    def get_exit(self):
-        cube = self.proto[-1]
-        rel_exit = self.gates[-1][1]
-        return tuple(Fraction(cube[j] + rel_exit[j], self.div) for j in range(self.dim))
-
     def reverse(self):
         """Reverse time in a curve."""
 
         kwargs = {}
-        if hasattr(self, 'gates'):
-            # ворота идут в обратном порядке, вход и выход меняются местами
-            kwargs['gates'] = reversed([(g[1], g[0]) for g in self.gates])
+        if hasattr(self, 'repr_maps'):
+            kwargs['repr_maps'] = reversed(self.repr_maps),
+
+        # симметрии не меняются!
 
         return self.changed(
             # прототип проходится в обратном порядке
@@ -99,15 +91,9 @@ class PartialFractalCurve:
             yield self.base_maps[cnum]
             return
 
-        curve_entr = self.get_entrance()
-        curve_exit = self.get_exit()
-        piece_entr, piece_exit = self.gates[cnum]
-        for bm in gen_constraint_cube_maps(self.dim, {curve_entr: piece_entr, curve_exit: piece_exit}):
-            yield bm
-            
-        if self.allow_time_rev:
-            for bm in gen_constraint_cube_maps(self.dim, {curve_entr: piece_exit, curve_exit: piece_entr}):
-                yield bm.reverse_time()
+        repr_map = self.repr_maps[cnum]
+        for symm in self.symmetries:
+            yield repr_map * symm
 
     def get_piece_position(self, cnum):
         return CurvePiecePosition(
@@ -152,22 +138,18 @@ class PartialFractalCurve:
         # - применить преобразование исходной кривой для перехода к фракции (bm)
         # - перейти к преобразованной кривой (cube_map)
         inv = cube_map.inverse()
-        new_maps = []
-        for bm in curve.base_maps:
-            if bm is None:
-                new_bm = None
-            else:
-                new_bm = cube_map * bm * inv
-            new_maps.append(new_bm)
+        conj_cache = {}
+        def conjugate(bm):
+            if bm not in conj_cache:
+                conj_cache[bm] = cube_map * bm * inv
+            return conj_cache[bm]
 
+        new_maps = [conjugate(bm) if bm is not None else None for bm in curve.base_maps]
         kwargs = {}
-        if hasattr(curve, 'gates'):
-            gates = []
-            for entr, exit in curve.gates:
-                new_entr = cube_map.apply_x(entr)
-                new_exit = cube_map.apply_x(exit)
-                gates.append((new_entr, new_exit))
-            kwargs['gates'] = gates
+        if hasattr(curve, 'symmetries'):
+            kwargs['symmetries'] = [conjugate(bm) for bm in self.symmetries]
+        if hasattr(curve, 'repr_maps'):
+            kwargs['repr_maps'] = [conjugate(bm) for bm in self.repr_maps]
 
         return self.changed(proto=proto, base_maps=new_maps, **kwargs)
 
@@ -572,13 +554,5 @@ class PairsTree:
         worst_pair = worst_item[-1]['pair']
         for pair in worst_pair.divide():
             pairs.append(pair)
-
-        lo = max(pair.lower_bound(self.ratio_func) for pair in pairs)
-        if lo < worst_item[-1]['lo']:
-            raise Exception("WTF LO")
-
-        up = max(pair.upper_bound(self.ratio_func) for pair in pairs)
-        if up > worst_item[-1]['up']:
-            raise Exception("WTF UP")
 
         return pairs

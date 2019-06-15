@@ -312,31 +312,25 @@ class FractalCurve(PartialFractalCurve):
                 base_maps=base_maps,
             )
 
-    def forget(self):
-        curve_entr = self.get_entrance()
-        curve_exit = self.get_exit()
+    def forget(self, allow_time_rev=False):
+        entr = self.get_entrance()
+        exit = self.get_exit()
 
-        # не создаём дробные ворота!
-        def fix(x):
-            return int(x) if x == int(x) else x
-
-        curve_entr = tuple(fix(ce) for ce in curve_entr)
-        curve_exit = tuple(fix(ce) for ce in curve_exit)
-
-        gates = []
-        for bm in self.base_maps:
-            new_entr = bm.apply_x(curve_entr)
-            new_exit = bm.apply_x(curve_exit)
-            if bm.time_rev:
-                new_entr, new_exit = new_exit, new_entr
-            gates.append((new_entr, new_exit))
+        symmetries = []
+        for bm in gen_constraint_cube_maps(self.dim, {entr: entr, exit: exit}):
+            symmetries.append(bm)
+            
+        if allow_time_rev:
+            for bm in gen_constraint_cube_maps(self.dim, {entr: exit, exit: entr}):
+                symmetries.append(bm.reverse_time())
 
         return PartialFractalCurve(
             dim=self.dim,
             div=self.div,
             proto=self.proto,
             base_maps=[None for j in range(self.genus)],  # забыли BaseMap-ы!
-            gates=gates,
+            repr_maps=self.base_maps,  # base_map-ы стали лишь представителями
+            symmetries=symmetries,
         )
 
     #

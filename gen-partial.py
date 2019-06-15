@@ -12,7 +12,7 @@ from utils import bmstr2base_map
 from examples import *
 from partial_fractal_curve import CurvePiecePosition, CurvePieceBalancedPair, PartialFractalCurve,  get_int_cube_with_cache
 from fractal_curve import FractalCurve
-from base_map import BaseMap
+from base_map import BaseMap, gen_constraint_cube_maps
 from curve_sat_adapter import CurveSATAdapter
 from gen_curve import CurveGenerator
 
@@ -34,13 +34,37 @@ ratio = ratio_l2
 
 
 def get_pcurve_for_brkline(dim, div, brkline, allow_time_rev):
-    proto = []
-    gates = []
-    for cube, entrance, exit in brkline:
-        proto.append(cube)
-        gates.append((entrance, exit))
+    proto = [brk[0] for brk in brkline]
+
+    cube_first, entr_first, _ = brkline[0]
+    entr = tuple(Fraction(cj + ej, div) for cj, ej in zip(cube_first, entr_first))
+
+    cube_last, _, exit_last = brkline[-1]
+    exit = tuple(Fraction(cj + ej, div) for cj, ej in zip(cube_last, exit_last))
+
+    symmetries = []
+    for bm in gen_constraint_cube_maps(dim, {entr: entr, exit: exit}):
+        symmetries.append(bm)
+    if allow_time_rev:
+        for bm in gen_constraint_cube_maps(dim, {entr: exit, exit: entr}):
+            symmetries.append(bm.reverse_time())
+
     base_maps = [None] * len(proto)
-    return PartialFractalCurve(dim=dim, div=div, proto=proto, base_maps=base_maps, gates=gates, allow_time_rev=allow_time_rev)
+    repr_maps = [None] * len(proto)
+
+    for cnum, brk in enumerate(brkline):
+        cube, rel_entr, rel_exit = brk
+        for bm in gen_constraint_cube_maps(dim, {entr: rel_entr, exit: rel_exit}):
+            repr_maps[cnum] = bm
+            break
+
+    return PartialFractalCurve(
+        dim=dim, div=div,
+        proto=proto,
+        base_maps=base_maps,
+        repr_maps=repr_maps,
+        symmetries=symmetries,
+    )
 
 # l40: found: 2
 def perebor(conf):
@@ -141,7 +165,7 @@ def timings1():
     perebor(conf)
 
 # Counter({'not_found': 76, 'found': 25})
-# 53s
+# 40s
 def timings2():
     conf = {
         'dim': 2,
@@ -158,6 +182,41 @@ def timings2():
     perebor(conf)
     print(get_int_cube_with_cache.cache_info())
 
+# Counter({'not_found': 70, 'found': 14})
+# 25s -> 14s
+def timings3():
+    conf = {
+        'dim': 3,
+        'div': 2,
+        'hdist': 1,
+        'max_cdist': 2,
+        'lower_bound': 700,
+        'upper_bound': 750,
+        'sat_pack': 50,
+        'max_iter': 100,
+        'allow_time_rev': False,
+        'find_model': False,
+    }
+    perebor(conf)
+
+# Counter({'not_found': 84, 'found': 2})
+# real    0m42.613s
+# -> 32s
+def timings4():
+    conf = {
+        'dim': 2,
+        'div': 5,
+        'hdist': 1,
+        'max_cdist': 1,
+        'lower_bound': 31.5,
+        'upper_bound': 32,
+        'sat_pack': 10,
+        'max_iter': 10000,
+        'allow_time_rev': True,
+        'find_model': True,
+    }
+    perebor(conf)
+
 if __name__ == "__main__":
     conf = {
         'dim': 2,
@@ -170,7 +229,7 @@ if __name__ == "__main__":
         #'max_iter': 20,
         'allow_time_rev': True,
     }
-    timings2()
+    timings1()
     #perebor(conf)
     #bauman()
     #pristalno()
