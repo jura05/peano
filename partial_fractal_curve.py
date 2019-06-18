@@ -52,10 +52,10 @@ class PartialFractalCurve:
         return type(self)(
             dim=self.dim,
             div=self.div,
-            proto=(proto if proto is not None else self.proto),
-            base_maps=(base_maps if base_maps is not None else self.base_maps),
-            repr_maps=(repr_maps if repr_maps is not None else self.repr_maps),
-            symmetries=(symmetries if symmetries is not None else self.symmetries),
+            proto=proto if proto is not None else self.proto,
+            base_maps=base_maps if base_maps is not None else self.base_maps,
+            repr_maps=repr_maps if repr_maps is not None else self.repr_maps,
+            symmetries=symmetries if symmetries is not None else self.symmetries,
         )
 
     def get_fraction(self, cnum):
@@ -67,7 +67,7 @@ class PartialFractalCurve:
 
         kwargs = {}
         if hasattr(self, 'repr_maps'):
-            kwargs['repr_maps'] = reversed(self.repr_maps),
+            kwargs['repr_maps'] = reversed(self.repr_maps)
 
         # симметрии не меняются!
 
@@ -104,11 +104,9 @@ class PartialFractalCurve:
         )
 
     def specify(self, cnum, base_map):
-        if self.base_maps[cnum] is not None:
-            if self.base_maps[cnum] == base_map:
-                return self  # nothing to do
-            else:
-                raise Exception("Can't specify curve")
+        if base_map not in self.gen_allowed_maps(cnum):
+            raise Exception("Can't specify curve")
+
         new_base_maps = list(self.base_maps)
         new_base_maps[cnum] = base_map
         return self.changed(base_maps=new_base_maps)
@@ -121,34 +119,30 @@ class PartialFractalCurve:
         # можно разложить базовое преобразование в произведение (коммутирующих) 
         # преобразований: обращение времени с тождественной изометрией  +  изометрии куба
         if base_map.time_rev:
-            curve = self.reverse()
-            cube_map = base_map.cube_map()
-        else:
-            curve = self
-            cube_map = base_map
+            return self.reverse().apply_base_map(base_map.cube_map())
 
         # применяем изометрию куба
 
         # прототип подвергается изометрии
-        proto = [cube_map.apply_cube(curve.div, cube) for cube in curve.proto]
+        proto = [base_map.apply_cube(self.div, cube) for cube in self.proto]
 
         # базовые преобразования сопрягаются: действительно, чтобы получить
         # из преобразованной кривой её фракцию, можно сделать так:
         # - сначала вернуться к исходной кривой (inv)
         # - применить преобразование исходной кривой для перехода к фракции (bm)
-        # - перейти к преобразованной кривой (cube_map)
-        inv = cube_map.inverse()
+        # - перейти к преобразованной кривой (base_map)
+        inv = base_map.inverse()
         conj_cache = {}
         def conjugate(bm):
             if bm not in conj_cache:
-                conj_cache[bm] = cube_map * bm * inv
+                conj_cache[bm] = base_map * bm * inv
             return conj_cache[bm]
 
-        new_maps = [conjugate(bm) if bm is not None else None for bm in curve.base_maps]
+        new_maps = [conjugate(bm) if bm is not None else None for bm in self.base_maps]
         kwargs = {}
-        if hasattr(curve, 'symmetries'):
+        if hasattr(self, 'symmetries'):
             kwargs['symmetries'] = [conjugate(bm) for bm in self.symmetries]
-        if hasattr(curve, 'repr_maps'):
+        if hasattr(self, 'repr_maps'):
             kwargs['repr_maps'] = [conjugate(bm) for bm in self.repr_maps]
 
         return self.changed(proto=proto, base_maps=new_maps, **kwargs)
@@ -183,7 +177,7 @@ class PartialFractalCurve:
                     yield CurvePieceBalancedPair(self, junc, pos1, pos2)
 
     # upper_bound - если кривая лучше - нам подходит
-    def estimate_ratio(self, ratio_func, lower_bound, upper_bound, max_iter=10**6, log_pack=100, sat_pack=100, find_model=False):
+    def estimate_ratio(self, ratio_func, lower_bound, upper_bound, max_iter=10**9, log_pack=100, sat_pack=100, find_model=False, verbose=False):
         adapter = curve_sat_adapter.CurveSATAdapter(dim=self.dim)
         adapter.init_curve(self)
 
@@ -197,8 +191,7 @@ class PartialFractalCurve:
         it = 0
         while it < max_iter:
             it += 1
-            for pair in pairs_tree.divide():
-                pairs_tree.add_pair(pair)
+            pairs_tree.divide()
             while pairs_tree.bad_pairs:
                 bad_pair = pairs_tree.bad_pairs.pop()
                 adapter.add_forbid_clause(bad_pair.junc, bad_pair.curve)
@@ -206,21 +199,22 @@ class PartialFractalCurve:
             if not pairs_tree.data:
                 break
 
-            worst_item = pairs_tree.data[0][-1]
-            worst_pair = worst_item['pair']
-
-            if it % log_pack == 0:
+            if it % log_pack == 0 and verbose:
+                worst_node = pairs_tree.data[0]
+                worst_pair = worst_node.pair
                 print({
                     'iter': it,
                     'pairs': len(pairs_tree.data),
                     'pqstats:': pairs_tree.stats,
-                    'up': float(worst_item['up']),
+                    'up': float(worst_node.up),
                     'depth': (worst_pair.pos1.depth, worst_pair.pos2.depth),
                 })
 
             if it % sat_pack == 0:
-                print('iter:', it, 'adapter stats:', adapter.stats())
+                if verbose:
+                    print('iter:', it, 'adapter stats:', adapter.stats())
                 if not adapter.solve():
+                    print('no SAT model')
                     return False
 
         if it == max_iter:
@@ -237,7 +231,11 @@ class PartialFractalCurve:
 
         # это если попросят модель
         model = adapter.get_model()
-        return adapter.get_curve_from_model(self, model)
+        return {
+            "model": model,
+            "curve": adapter.get_curve_from_model(self, model),
+            "pairs_tree": pairs_tree,
+        }
 
 
     #
@@ -399,13 +397,13 @@ class CurvePiece:
 
         # делим
         for bm in prev_curve.gen_allowed_maps(active_cnum):
-            last_curve = prev_curve.apply_base_map(bm)
 
             # сопряжение, как в apply:
-            # для prev_map.base_maps[active_cnum] = bm =>  orig_curve.base_maps[spec_cnum] = ...
+            # для prev_curve.base_maps[active_cnum] = bm =>  orig_curve.base_maps[spec_cnum] = ...
             new_map = prev_map.inverse() * bm * prev_map
             specified_curve = curve.specify(spec_cnum, new_map)
 
+            last_curve = prev_curve.apply_base_map(bm)
             for cnum, cube in enumerate(last_curve.proto):
                 new_pos = self.pos.specify(cnum, cube)
                 new_piece = CurvePiece(specified_curve, new_pos)
@@ -511,14 +509,23 @@ class CurvePieceBalancedPair:
 
 # пары фракций с приоритетом
 class PairsTree:
+
+    RichPair = namedtuple('RichPair', [
+        'priority',  # первое поле, по нему идёт сравнение; для быстрой сортировки по upper_bound
+        'pair',  # CurvePieceBalancedPair
+        'up',  # upper_bound
+        'lo',  # lower_bound
+    ])
+
     def __init__(self, ratio_func):
         self.data = []
         self.stats = Counter()
         self.bad_pairs = []
         self.ratio_func = ratio_func
-        self._inc = 0
         self.good_threshold = None  # если отношение <= порога, пара хорошая
         self.bad_threshold = None  # если отношение > порога, пара плохая
+        self._inc = 0
+        self.LOG = []
 
     def set_good_threshold(self, thr):
         self.good_threshold = thr
@@ -527,8 +534,6 @@ class PairsTree:
         self.bad_threshold = thr
 
     def add_pair(self, pair):
-        self._inc += 1
-
         up = pair.upper_bound(self.ratio_func)
         gthr = self.good_threshold
         if gthr is not None and float(up) < gthr:  # TOOD нет ли проблемы с округлением
@@ -542,17 +547,14 @@ class PairsTree:
             self.stats['bad'] += 1
             return
 
-        item = (-float(up), self._inc, {'pair': pair, 'up': up, 'lo': lo})
-        heappush(self.data, item)
+        self._inc += 1  # чтобы сравнение не проваливалось к парам
+        node = PairsTree.RichPair(priority=(-float(up), self._inc), pair=pair, up=up, lo=lo)
+        heappush(self.data, node)
 
-    # здесь нельзя делать генератор!
     def divide(self):
-        pairs = []
         if not self.data:
-            return pairs
-        worst_item = heappop(self.data)
-        worst_pair = worst_item[-1]['pair']
-        for pair in worst_pair.divide():
-            pairs.append(pair)
+            return
 
-        return pairs
+        worst_node = heappop(self.data)
+        for pair in worst_node.pair.divide():
+            self.add_pair(pair)

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # coding: UTF-8
 
+import pickle
 import sys
 import logging
 import itertools
@@ -66,7 +67,6 @@ def get_pcurve_for_brkline(dim, div, brkline, allow_time_rev):
         symmetries=symmetries,
     )
 
-# l40: found: 2
 def perebor(conf):
     curve_gen = CurveGenerator(dim=conf['dim'], div=conf['div'], hdist=conf['hdist'], max_cdist=conf['max_cdist'], verbose=1)
     brklines = list(curve_gen.generate_brklines())
@@ -83,6 +83,7 @@ def perebor(conf):
             upper_bound=conf['upper_bound'],
             sat_pack=conf['sat_pack'],
             find_model=conf.get('find_model'),
+            verbose=True,
         )
         if has_good:
             stats['found'] += 1
@@ -90,6 +91,153 @@ def perebor(conf):
             stats['not_found'] += 1
         if conf.get('max_iter') and it >= conf['max_iter']: break
     print(stats)
+
+def clever_perebor(conf):
+    curve_gen = CurveGenerator(dim=conf['dim'], div=conf['div'], hdist=conf['hdist'], max_cdist=conf['max_cdist'], verbose=1)
+    brklines = list(curve_gen.generate_brklines())
+    best_up = 40  # АПРИОРИ
+    ratio_func = ratio_l2
+
+    print('CONF:', conf)
+    stats = Counter()
+    for it, brkline in enumerate(brklines):
+        print('BRKLINE: {} of {} ({:.2f} %)'.format(it + 1, len(brklines), 100 * (it + 1) / len(brklines)), flush=True)
+        pcurve = get_pcurve_for_brkline(conf['dim'], conf['div'], brkline, allow_time_rev=conf['allow_time_rev'])
+
+        if best_up is not None:
+            # проверка, что тут есть шансы
+            has_good = pcurve.estimate_ratio(
+                ratio_func,
+                lower_bound=best_up * (1 - conf['rel_tol']),
+                upper_bound=best_up,
+                sat_pack=conf['sat_pack'],
+                find_model=False,
+                verbose=True,
+            )
+            if not has_good:
+                print('no chances')
+                continue
+
+        # начинается поиск!
+        curr_lo = 0
+        curr_up = best_up
+        # инвариант: лучшая кривая в данном классе лежит в [curr_lo, curr_up]
+
+        curr_threshold = curr_up * 0.6 + curr_lo * 0.4
+        # делаем bisect для поиска хорошей кривой
+        while curr_up * (1 - 2 * conf['rel_tol']) > curr_lo:
+            print('best in ', curr_lo, curr_up, 'seek with threshold:', curr_threshold)
+            has_good = pcurve.estimate_ratio(
+                ratio_func,
+                lower_bound=curr_threshold * (1 - conf['rel_tol']),
+                upper_bound=curr_threshold,
+                sat_pack=conf['sat_pack'],
+                find_model=False,
+                verbose=True,
+            )
+            if has_good:
+                curr_up = curr_threshold
+                print('NEW BEST UP:', curr_up)
+                best_up = curr_up
+            else:
+                curr_lo = curr_threshold * (1 - conf['rel_tol'])
+
+            curr_threshold = curr_up * 0.8 + curr_lo * 0.2
+
+    print('BEST UP:', best_up)
+
+def triple_perebor(conf):
+    curve_gen = CurveGenerator(dim=conf['dim'], div=conf['div'], hdist=conf['hdist'], max_cdist=conf['max_cdist'], verbose=1)
+    brklines = list(curve_gen.generate_brklines())
+    best_up = 36
+    apriori_up = 80
+    ratio_func = ratio_l2
+
+    print('CONF:', conf)
+    stats = Counter()
+    for it, brkline in enumerate(brklines):
+        print('BRKLINE: {} of {} ({:.2f} %)'.format(it + 1, len(brklines), 100 * (it + 1) / len(brklines)), flush=True)
+        pcurve = get_pcurve_for_brkline(conf['dim'], conf['div'], brkline, allow_time_rev=conf['allow_time_rev'])
+
+        if it + 1 != 49:
+            continue
+
+        # начинается поиск!
+        curr_lo = 0
+        curr_up = apriori_up
+        # инвариант: лучшая кривая в данном классе лежит в [curr_lo, curr_up]
+
+        # делаем bisect для поиска хорошей кривой
+        while curr_up * (1 - conf['rel_tol']) > curr_lo:
+            new_lo = 2/3 * curr_lo + 1/3 * curr_up
+            new_up = 1/3 * curr_lo + 2/3 * curr_up
+            print('best in ', curr_lo, curr_up, 'seek with thresholds:', new_lo, new_up)
+            has_good = pcurve.estimate_ratio(
+                ratio_func,
+                lower_bound=new_lo,
+                upper_bound=new_up,
+                sat_pack=conf['sat_pack'],
+                find_model=False,
+                verbose=True,
+            )
+            if has_good:
+                curr_up = new_up
+            else:
+                curr_lo = new_lo
+
+            if curr_up < best_up:
+                print('NEW BEST UP:', curr_up)
+                best_up = curr_up
+
+            if curr_lo > best_up:
+                print('NO CHANCES!')
+                break
+
+        print('ratio in:', curr_lo, curr_up)
+        data = pcurve.estimate_ratio(
+            ratio_func,
+            lower_bound=best_up * 1.0001,
+            upper_bound=best_up * 1.0002,
+            sat_pack=conf['sat_pack'],
+            find_model=True,
+            verbose=True,
+        )
+        curve = data['curve']
+        pickle.dump(curve, open('best_curve.pickle', 'wb'))
+        res = curve.estimate_ratio_new(ratio_l2, rel_tol=0.000001)
+        print(res)
+        print(curve.proto)
+        print(curve.base_maps)
+
+    print('BEST UP:', best_up)
+
+
+def pristalno2():
+    curve_gen = CurveGenerator(dim=2, div=5, hdist=1, max_cdist=1, verbose=1)
+    brklines = list(curve_gen.generate_brklines())
+    brkline = brklines[48]
+    for cnum, data in enumerate(brkline):
+        print('cnum:', cnum, 'cube:', data[0], 'entr:', data[1], 'exit:', data[2])
+    pcurve = get_pcurve_for_brkline(2, 5, brkline, allow_time_rev=True)
+
+    res1 = pcurve.estimate_ratio(
+        ratio_l2,
+        lower_bound=5.55556**2,
+        upper_bound=5.55557**2,
+        sat_pack=100,
+        find_model=True,
+        verbose=True,
+    )
+    res2 = res1['curve'].estimate_ratio_new(ratio_l2, rel_tol=0.00001)
+    allres = {
+        "model": res1["model"],
+        "curve": res1["curve"],
+        'log1': res1['pairs_tree'].LOG,
+        'log2': res2['pairs_tree'].LOG,
+    }
+    #pickle.dump(allres, open("50_9.pickle", "wb"))
+
+
 
 def pristalno():
     proto = [
@@ -147,6 +295,21 @@ def bauman():
     pcurve = pcurve.changed(allow_time_rev=True)
     pcurve.estimate_ratio(ratio_l2, lower_bound=32.2, upper_bound=32.1, sat_pack=1000, find_model=True)
 
+def test_perebor():
+    conf = {
+        'dim': 2,
+        'div': 5,
+        'hdist': 2,
+        'max_cdist': 1,
+        'lower_bound': 40,
+        'upper_bound': 60,
+        'sat_pack': 10,
+        'allow_time_rev': True,
+        'find_model': True,
+        'max_iter': 50,
+    }
+    perebor(conf)
+
 # Counter({'not_found': 11, 'found': 10})
 # time=16s
 def timings1():
@@ -178,6 +341,7 @@ def timings2():
         'max_iter': 100,
         'allow_time_rev': False,
         'find_model': False,
+        'verbose': True,
     }
     perebor(conf)
     print(get_int_cube_with_cache.cache_info())
@@ -223,13 +387,13 @@ if __name__ == "__main__":
         'div': 5,
         'hdist': 1,
         'max_cdist': 1,
-        'lower_bound': 32.05,
-        'upper_bound': 32.1,
+        'rel_tol': 0.00001,
         'sat_pack': 100,
-        #'max_iter': 20,
         'allow_time_rev': True,
     }
-    timings1()
+    #test_perebor()
+    triple_perebor(conf),
+    #timings4()
     #perebor(conf)
     #bauman()
-    #pristalno()
+    #pristalno2()

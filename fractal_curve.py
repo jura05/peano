@@ -412,8 +412,8 @@ class FractalCurve(PartialFractalCurve):
         for pair in self.init_pairs_tree():
             pairs_tree.add_pair(pair)
 
-        curr_lo = max(float(t[-1]['lo']) for t in pairs_tree.data)
-        curr_up = float(pairs_tree.data[0][-1]['up'])
+        curr_lo = max(float(node.lo) for node in pairs_tree.data)
+        curr_up = float(pairs_tree.data[0].up)
 
         pairs_tree.set_good_threshold(curr_lo)
 
@@ -421,17 +421,16 @@ class FractalCurve(PartialFractalCurve):
             if not pairs_tree.data:
                 break
             
-            for pair in pairs_tree.divide():
-                pairs_tree.add_pair(pair)
+            pairs_tree.divide()
 
-            new_lo = max(float(t[-1]['lo']) for t in pairs_tree.data)
+            new_lo = max(float(node.lo) for node in pairs_tree.data)
             if new_lo > curr_lo:
                 if verbose:
                     print('new lower bound: ', new_lo, curr_up)
                 curr_lo = new_lo
             pairs_tree.set_good_threshold(curr_lo)
 
-            new_up = float(pairs_tree.data[0][-1]['up'])
+            new_up = float(pairs_tree.data[0].up)
             if new_up < curr_up:
                 if verbose:
                     print('new upper bound: ', curr_lo, new_up)
@@ -440,7 +439,7 @@ class FractalCurve(PartialFractalCurve):
             if curr_up < curr_lo * (1 + rel_tol):
                 break
 
-        return {'up': curr_up, 'lo': curr_lo}
+        return {'up': curr_up, 'lo': curr_lo, 'pairs_tree': pairs_tree}
 
 #
 #  OLD CODE 
