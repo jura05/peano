@@ -4,6 +4,9 @@ from fractions import Fraction
 import functools
 import itertools
 
+from sympy.combinatorics.permutations import Permutation
+
+
 class BaseMap:
     """Base map: isometry of cube and (possibly) time reversal.
     Immutable and hashable.
@@ -87,15 +90,12 @@ class BaseMap:
         return type(self)(self.perm, self.flip, not self.time_rev)
 
     def is_oriented(self):
-        assert self.dim == 2
         oriented = True
         for f in self.flip:
             if f: oriented = not oriented
-        if self.perm == (0, 1):
-            return oriented
-        else:
-            return not oriented
-
+        if Permutation(self.perm).signature() == -1:
+            oriented = not oriented
+        return oriented
 
     def apply_x(self, x):
         """Apply isometry to a point x."""
