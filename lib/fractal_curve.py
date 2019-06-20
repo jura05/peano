@@ -7,8 +7,9 @@ from fast_fractions import FastFraction
 from math import gcd
 from collections import Counter
 
-from base_map import BaseMap, PieceMap
-from partial_fractal_curve import PartialFractalCurve, Junction, PairsTree
+from base_map import BaseMap, PieceMap, gen_constraint_cube_maps
+from partial_fractal_curve import PartialFractalCurve, Junction
+import pieces
 
 
 class FractalCurve(PartialFractalCurve):
@@ -350,12 +351,25 @@ class FractalCurve(PartialFractalCurve):
 
     def estimate_ratio_simple(self, ratio_func, subdivision=0):
         curve = self.get_subdivision(subdivision) if subdivision > 0 else self
+
+        gates = []
+        entr = [int(xj) for xj in self.get_entrance()]
+        exit = [int(xj) for xj in self.get_exit()]
+        for cnum, base_map in enumerate(curve.base_maps):
+            piece_entr = base_map.apply_x(entr)
+            piece_exit = base_map.apply_x(exit)
+            if base_map.time_rev:
+                piece_entr, piece_exit = piece_exit, piece_entr
+            gates.append((piece_entr, piece_exit))
             
-        # TODO заменить на gates!
         max_r = None
-        pcurve = curve.forget()
-        data = zip(range(pcurve.genus), pcurve.proto, pcurve.gates)
+        data = zip(range(curve.genus), curve.proto, gates)
+        it = 0
+        tot = curve.genus * (curve.genus - 1) // 2
         for pair in itertools.combinations(data, 2):
+            it += 1
+            if it % 100000 == 0:
+                print('iter: {} of {} ({:.2f} %)'.format(it + 1, tot, 100 * (it + 1) / tot))
             cnum1, cube1, gate1 = pair[0]
             cnum2, cube2, gate2 = pair[1]
 
@@ -374,29 +388,6 @@ class FractalCurve(PartialFractalCurve):
 
         return max_r
 
-    def estimate_ratio_vertex_brkline(self, ratio_func, subdivision=0):
-        curve = self.get_subdivision(subdivision) if subdivision > 0 else self
-            
-        # TODO заменить на gates!
-        max_r = None
-        pcurve = curve.forget()
-        data = zip(range(pcurve.genus), pcurve.proto, pcurve.gates)
-        for pair in itertools.combinations(curve.get_vertex_brkline(), 2):
-            x1, t1 = pair[0]
-            x2, t2 = pair[1]
-            if t1 == t2:
-                continue
-
-            dx = [x1j - x2j for x1j, x2j in zip(x1, x2)]
-
-            num, denum = ratio_func(self.dim, dx, t2 - t1)
-            r = float(num / denum)
-            if max_r is None or r > max_r:
-                print('max_r:', max_r, flush=True)
-                max_r = r
-
-        return max_r
-
     def init_pairs_tree(self):
         juncs = set(self.gen_junctions())
         for pair in super().init_pairs_tree():
@@ -407,7 +398,7 @@ class FractalCurve(PartialFractalCurve):
         curr_up = None
         curr_lo = 0
 
-        pairs_tree = PairsTree(ratio_func)
+        pairs_tree = pieces.PairsTree(ratio_func)
 
         for pair in self.init_pairs_tree():
             pairs_tree.add_pair(pair)
