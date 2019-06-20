@@ -1,22 +1,10 @@
-from examples import *
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-sub_numb = 2
 
-#curve = get_hilbert_curve()
-#curve = get_peano_curve()
-#curve = get_meurthe_curve()
-#curve = get_coil_curve()
-#curve = get_serpentine_curve()
-#curve = get_R_curve()
-curve = get_haverkort_curve_1()
-#curve = get_haverkort_curve_2()
-#curve = get_tokarev_curve()
-#curve = get_discontinuous_curve()
-#curve = get_morton_curve()
-
-def plot_curve(subdiv_n, dim, genus, sub_numb):
+def plot_curve(curve, sub_numb, output_file=None):
+    dim, genus = curve.dim, curve.genus
+    subdiv_n = curve.get_subdivision(sub_numb).proto
     
     #Масштабируем координаты, делим все значения на genus**((sub_numb+1)/dim)
     subdiv_n = [[i/(genus**((sub_numb+1)/dim)) for i in subdiv_n[j]] for j in range(len(subdiv_n))]   
@@ -64,5 +52,5 @@ def plot_curve(subdiv_n, dim, genus, sub_numb):
         sub3 = [row[2] for row in subdiv_n]
         ax.plot(sub1,sub2,sub3,'k')
 
-
-plot_curve(curve.get_subdivision(k=sub_numb).proto, curve.dim, curve.div**curve.dim, sub_numb)
+    if output_file is not None:
+        plt.savefig(output_file)
