@@ -5,6 +5,16 @@ import re
 from base_map import BaseMap
 
 
+def ratio_linf(d, dv, dt):
+    return (max(abs(x) for x in dv)**d, dt)
+
+def ratio_l1(d, dv, dt):
+    return (sum(abs(x) for x in dv)**d, dt)
+
+def ratio_l2_squared(d, dv, dt):
+    return (sum(x**2 for x in dv)**d, dt**2)
+
+
 def chain2proto(chain_code):
     """Convert chain code like 'ijK' to curve prototype."""
     
