@@ -394,11 +394,14 @@ class FractalCurve(PartialFractalCurve):
             if pair.junc is None or pair.junc in juncs:
                 yield pair
 
-    def estimate_ratio_new(self, ratio_func, rel_tol=0.01, max_iter=10**6, verbose=False):
+    def estimate_ratio_new(self, ratio_func, rel_tol=0.01, max_iter=10**6, use_vertex_brkline=False, verbose=False):
         curr_up = None
         curr_lo = 0
 
-        pairs_tree = pieces.PairsTree(ratio_func)
+        pairs_tree_par = {}
+        if use_vertex_brkline:
+            pairs_tree_par['brkline'] = self.get_vertex_brkline()
+        pairs_tree = pieces.PairsTree(ratio_func, **pairs_tree_par)
 
         for pair in self.init_pairs_tree():
             pairs_tree.add_pair(pair)

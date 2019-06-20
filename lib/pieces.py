@@ -1,6 +1,7 @@
 from functools import lru_cache
 from collections import Counter, namedtuple
 from heapq import heappop, heappush
+from fractions import Fraction
 
 from fast_fractions import FastFraction
 from base_map import BaseMap, gen_constraint_cube_maps
@@ -84,7 +85,6 @@ class CurvePiece:
             prev_map = prev_map * curve.base_maps[cnum]  # именно в таком порядке!
 
         prev_curve = curve.apply_base_map(prev_map)
-
         active_cnum = self.pos.cnums[-1]  # кубик, где всё происходит
         spec_cnum = prev_map.apply_cnum(G, active_cnum)
 
@@ -124,13 +124,8 @@ class CurvePieceBalancedPair:
             for subpiece in self.piece1.divide():
                 yield type(self)(subpiece.curve, self.junc, subpiece.pos, self.pos2)
 
-    # пространственные и временные расстояния
-    def int_dist(self):
-        if not hasattr(self, '_int_dist'):
-            self._int_dist = self.get_int_dist()
-        return self._int_dist
-
-    def get_int_dist(self):
+    # brkline - ломаная, последовательность пар (x,t); x \in [0,1]^d, t \in [0,1]
+    def get_bounds(self, ratio_func, brkline=None):
         dim = self.curve.dim
         N = self.curve.div
         G = self.curve.genus
@@ -139,6 +134,11 @@ class CurvePieceBalancedPair:
 
         l1, x1, t1 = pos1.get_int_coords()
         l2, x2, t2 = pos2.get_int_coords()
+
+        use_brkline = (brkline is not None)
+        if use_brkline:
+            brkline1 = brkline
+            brkline2 = brkline
 
         junc = self.junc
         if junc is None:
@@ -151,10 +151,16 @@ class CurvePieceBalancedPair:
             # junc: time_rev
             if junc.time_rev:
                 t1 = pos1.sub_genus - 1 - t1
+                if use_brkline:
+                    brkline1 = [(x, 1 - t) for x, t in brkline1]
 
             # junc: сначала поворот
-            x2 = junc.base_map.apply_cube(pos2.sub_div, x2)
-            t2 = junc.base_map.apply_cnum(pos2.sub_genus, t2)
+            base_map = junc.base_map
+            x2 = base_map.apply_cube(pos2.sub_div, x2)
+            t2 = base_map.apply_cnum(pos2.sub_genus, t2)
+
+            if use_brkline:
+                brkline2 = [(base_map.apply_x(x), base_map.apply_t(t)) for x, t in brkline2]
 
         # приведение к единому масштабу
         if l1 == l2:
@@ -177,28 +183,41 @@ class CurvePieceBalancedPair:
         # time1: t1 <= t <= t1 + 1
         # time2: t2 <= t <= t2 + mt2, после сдвига: t2 + junc_dt * mt <= t <= t2 + mt2 + junc_dt * mt
 
+        # junc: потом сдвиг
+        t2 += junc_dt * mt
+        x2 = [x2j + junc_dxj * mx for x2j, junc_dxj in zip(x2, junc_dx)]
+
         max_dx = [None] * dim
         for j in range(dim):
             x1j = x1[j]
-
-            # junc: потом сдвиг
-            x2j = x2[j] + junc_dx[j] * mx
-
+            x2j = x2[j]
             dxj = max(abs(x1j - x2j + 1), abs(x1j - x2j - mx2))
             max_dx[j] = dxj
 
-        max_dt = t2 + junc_dt * mt + mt2 - t1  # max(t_2 - t_1)
-        min_dt = t2 + junc_dt * mt - (t1 + 1)  # min(t_2 - t_1)
+        max_dt = t2 + mt2 - t1  # max(t_2 - t_1)
+        min_dt = t2 - (t1 + 1)  # min(t_2 - t_1)
 
-        return {'max_dx': max_dx, 'min_dt': min_dt, 'max_dt': max_dt}
+        lo = FastFraction(*ratio_func(dim, max_dx, max_dt))
+        up = FastFraction(*ratio_func(dim, max_dx, min_dt))
 
-    def upper_bound(self, ratio_func):
-        dist = self.int_dist()
-        return FastFraction(*ratio_func(self.curve.dim, dist['max_dx'], dist['min_dt']))
+        if use_brkline:
+            for x1rel, t1rel in brkline1:
+                t1_final = t1 + t1rel
+                x1_final = [x1j + x1relj for x1j, x1relj in zip(x1, x1rel)]
+                for x2rel, t2rel in brkline2:
+                    t2_final = t2 + t2rel * mt2
+                    x2_final = [x2j + x2relj * mx2 for x2j, x2relj in zip(x2, x2rel)]
 
-    def lower_bound(self, ratio_func):
-        dist = self.int_dist()
-        return FastFraction(*ratio_func(self.curve.dim, dist['max_dx'], dist['max_dt']))
+                    dx = [x1j - x2j for x1j, x2j in zip(x1_final, x2_final)]
+                    dt = t2_final - t1_final
+
+                    lo_final = Fraction(*ratio_func(dim, dx, dt))
+                    lo_final = FastFraction(lo_final.numerator, lo_final.denominator)
+                    if lo_final > lo:
+                        lo = lo_final
+
+        return lo, up
+
 
 # пары фракций с приоритетом
 class PairsTree:
@@ -210,15 +229,15 @@ class PairsTree:
         'lo',  # lower_bound
     ])
 
-    def __init__(self, ratio_func):
+    def __init__(self, ratio_func, brkline=None):
         self.data = []
         self.stats = Counter()
         self.bad_pairs = []
         self.ratio_func = ratio_func
         self.good_threshold = None  # если отношение <= порога, пара хорошая
         self.bad_threshold = None  # если отношение > порога, пара плохая
+        self.brkline = brkline
         self._inc = 0
-        self.LOG = []
 
     def set_good_threshold(self, thr):
         self.good_threshold = thr
@@ -227,13 +246,12 @@ class PairsTree:
         self.bad_threshold = thr
 
     def add_pair(self, pair):
-        up = pair.upper_bound(self.ratio_func)
+        lo, up = pair.get_bounds(self.ratio_func, brkline=self.brkline)
         gthr = self.good_threshold
         if gthr is not None and float(up) < gthr:  # TOOD нет ли проблемы с округлением
             self.stats['good'] += 1
             return
 
-        lo = pair.lower_bound(self.ratio_func)
         bthr = self.bad_threshold
         if bthr is not None and float(lo) > bthr:
             self.bad_pairs.append(pair)

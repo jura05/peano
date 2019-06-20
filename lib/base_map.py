@@ -101,6 +101,10 @@ class BaseMap:
         """Apply isometry to a point x."""
         return tuple(1-x[k] if b else x[k] for k, b in zip(self.perm, self.flip))
 
+    def apply_t(self, t):
+        return 1 - t if self.time_rev else t
+
+    # TODO: порядок аругментов!!!
     def apply_x2(self, x, l):
         """Apply isometry to a point x of [0,l]^d."""
         return tuple(l-x[k] if b else x[k] for k, b in zip(self.perm, self.flip))
