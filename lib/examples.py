@@ -134,8 +134,34 @@ def get_haverkort_curve_1():
         base_maps=[basis2base_map(b) for b in bases],
     )
 
+# Minimal 3D monofractal curve with time reversal in L_inf (12.4)
+# "An inventory of three-dimensional Hilbert space-filling curves", Herman Haverkort; Curve F (see p.13, p.18)
+# https://arxiv.org/abs/1109.2323
+# Curve A26, see p.10, p.15, p.18
+def get_haverkort_curve_A26():
+    """3-D curve with time reversal."""
+    proto = [(0,0,0), (0,0,1), (0,1,1), (0,1,0), (1,1,0), (1,1,1), (1,0,1), (1,0,0)]
+    base_maps = [
+        BaseMap([2, 1, 0], [False, False, False]),
+        BaseMap([2, 0, 1], [False, False, False]),
+        BaseMap([2, 0, 1], [False, True, False], time_rev=True),
+        BaseMap([0, 2, 1], [False, True, True]),
+        BaseMap([0, 2, 1], [True, True, True], time_rev=True),
+        BaseMap([2, 0, 1], [True, True, False]),
+        BaseMap([2, 0, 1], [True, False, False], time_rev=True),
+        BaseMap([1, 2, 0], [True, False, False], time_rev=True),
+    ]
+    return FractalCurve(
+        proto=proto,
+        base_maps=base_maps,
+    )
+
+
 
 # Minimal 3D monofractal curve with time reversal in L_1 (89.8) and L_2 (18.6)
+# "An inventory of three-dimensional Hilbert space-filling curves", Herman Haverkort;
+# https://arxiv.org/abs/1109.2323
+# Curve F, see p.13, p.15, p.18
 def get_haverkort_curve_2():
     """3-D curve with time reversal."""
     chain_code = 'kjKikJK'

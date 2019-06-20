@@ -52,6 +52,10 @@ class TestCurve(unittest.TestCase):
                 'ratio': {'l1': (10 + 2/3), 'l2': (6 + 2/3), 'linf': (6 + 2/3)},
             },
             {   
+                'curve': get_haverkort_curve_A26(),
+                'ratio': {'l1': (99 + 5/9), 'l2': [22.7,22.9], 'linf': (12 + 4/9)},
+            },
+            {   
                 'curve': get_haverkort_curve_2(),
                 'ratio': {'l1': [89.7, 89.8], 'l2': [18,19], 'linf': 14},
             },
