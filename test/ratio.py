@@ -33,7 +33,11 @@ class TestCurve(unittest.TestCase):
             },
             {
                 'curve': get_scepin_bauman_curve(),
-                'ratio': {'l2': (5 + 2/3)},
+                'ratio': {'l1': (10 + 2/3), 'l2': (5 + 2/3), 'linf': (5 + 1/3)},
+            },
+            {
+                'curve': get_meurthe_curve(),
+                'ratio': {'l1': (10 + 2/3), 'l2': (5 + 2/3), 'linf': (5 + 1/3)},
             },
             {
                 'curve': get_serpentine_curve(),
@@ -70,8 +74,8 @@ class TestCurve(unittest.TestCase):
                     func = utils.ratio_linf
 
                 res = curve.estimate_ratio_new(func, rel_tol=0.0001)
-                assert res['up'] <= ratio_up
-                assert res['lo'] >= ratio_lo
+                assert res['up'] <= ratio_up, 'metric {} up failed: {} > {}'.format(metric, res['up'], ratio_up)
+                assert res['lo'] >= ratio_lo, 'metric {} lo failed: {} < {}'.format(metric, res['lo'], ratio_lo)
 
     def test_pcurve_ratio(self):
         pcurve = get_peano5_curve().forget(allow_time_rev=True)

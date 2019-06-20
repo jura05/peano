@@ -83,10 +83,11 @@ def get_peano5_curve():
 
 
 # Minimal 2D monofractal curve in L_inf (5.333) and L_2 (5.667)
+# equivalent to Scepin-Bauman curve
 def get_meurthe_curve():
 
     chain_code = 'jjiJJijj'
-    bases = ['ij','Ji','ij','jI','JI','iJ','ji','Ji','ij']
+    bases = ['ji','Ji','ij','jI','JI','iJ','ji','Ji','ij']
     return FractalCurve(
         proto=chain2proto(chain_code),
         base_maps=[basis2base_map(b) for b in bases],
