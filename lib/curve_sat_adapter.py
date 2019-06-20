@@ -158,17 +158,12 @@ class CurveSATAdapter:
                 return full_curve
 
     # для отладки
-#    def get_model_from_curve(self, curve):
-#        curve_clauses = []
-#        for cnum, bm in enumerate(curve.base_maps):
-#            if bm is not None:
-#                bm_var, bm_val = self.get_bm_token(cnum, bm)
-#                curve_clauses.append({bm_var: bm_val})
-#
-#        clauses = self.common_clauses + self.def_clauses + curve_clauses
-#        int_clauses = self.get_int_clauses(clauses)
-#        self.solver = Glucose3()
-#        self.solver.append_formula(int_clauses)
-#        self.solver.solve()
-#        int_model = self.solver.get_model()
-#        return self.get_model_from_int_model(int_model)
+    def get_model_from_curve(self, curve):
+        for cnum, bm in enumerate(curve.base_maps):
+            if bm is not None:
+                bm_var = self.get_bm_var(cnum, bm)
+                self.append_clause({bm_var: True})
+
+        if not self.solve():
+            raise Exception("Can't get model, no such curve!")
+        return self.get_model()

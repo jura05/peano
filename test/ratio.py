@@ -6,7 +6,7 @@ import unittest
 # run script from peano directory
 import sys
 import os
-sys.path.append(os.path.dirname(sys.argv[0]) + '/..')
+sys.path.append(os.path.dirname(sys.argv[0]) + '/../lib')
 
 from examples import *
 import utils
@@ -33,8 +33,6 @@ class TestCurve(unittest.TestCase):
                     func = utils.ratio_linf
 
                 res = curve.estimate_ratio_new(func, rel_tol=0.0001)
-                res = curve.estimate_ratio(func, rel_tol=0.0001)
-                print(res)
                 assert res['up'] <= ratio * 1.001
                 assert res['lo'] >= ratio * 0.999
 

@@ -6,7 +6,7 @@ import unittest
 # run script from peano directory
 import sys
 import os
-sys.path.append(os.path.dirname(sys.argv[0]) + '/..')
+sys.path.append(os.path.dirname(sys.argv[0]) + '/../lib')
 
 from examples import *
 from fractal_curve import FractalCurve
@@ -21,24 +21,20 @@ class TestCurve(unittest.TestCase):
 
     def test_curves(self):
         for pcurve in self.curves:
-            adapter = CurveSATAdapter(dim=pcurve.dim)
-            junc_info = pcurve.get_junctions_info()
-
-            for junc, curves in junc_info.items():
-                adapter.make_junc_var(junc, curves)
-
-            for curve in FractalCurve.get_possible_curves(pcurve):
-                juncs = curve.get_junctions()
+            for curve in FractalCurve.gen_possible_curves(pcurve):
+                adapter = CurveSATAdapter(dim=pcurve.dim)
+                adapter.init_curve(pcurve)
                 model = adapter.get_model_from_curve(curve)
+                juncs = curve.get_junctions()
                 for junc in juncs:
-                    junc_var = ('junc', junc)
+                    junc_var = adapter.get_junc_var(junc)
                     if not model[junc_var]:
                         raise Exception("Bad junc_var: False for existent junc!")
-                for junc in junc_info:
-                    if junc not in juncs:
-                        junc_var = ('junc', junc)
-                        if model[junc_var]:
-                            raise Exception("Bad junc_var: True for non-existent junc!")
+#                for junc in junc_info:
+#                    if junc not in juncs:
+#                        junc_var = adapter.get_junc_var(junc)
+#                        if model[junc_var]:
+#                            raise Exception("Bad junc_var: True for non-existent junc!")
                 print('.', end='', flush=True)
 
             print('*', flush=True)
@@ -48,3 +44,4 @@ class TestCurve(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

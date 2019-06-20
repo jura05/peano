@@ -6,7 +6,7 @@ import unittest
 # run script from peano directory
 import sys
 import os
-sys.path.append(os.path.dirname(sys.argv[0]) + '/..')
+sys.path.append(os.path.dirname(sys.argv[0]) + '/../lib')
 
 from fractal_curve import FractalCurve
 from examples import *
@@ -14,30 +14,31 @@ from examples import *
 class TestCurve(unittest.TestCase):
     def setUp(self):
         self.curves = [
-            get_hilbert_curve().forget(),
-            get_peano_curve().forget(),
-            get_tokarev_curve().forget(),
-            get_rev_curve().forget(),
+            get_hilbert_curve(),
+            get_peano_curve(),
+            get_tokarev_curve(),
+            get_rev_curve(),
         ]
 
     def test_curves(self):
         for curve in self.curves:
-            rrcurve = curve.reverse().reverse()
-            self.assertEqual(curve.proto, rrcurve.proto)
-            self.assertEqual(curve.bm_info(), rrcurve.bm_info())
+            pcurve = curve.forget()
+            rrcurve = pcurve.reverse().reverse()
+            self.assertEqual(pcurve.proto, rrcurve.proto)
+            self.assertEqual(pcurve.bm_info(), rrcurve.bm_info())
 
         for curve in self.curves:
-            curve = curve.changed(allow_time_rev=True)
+            pcurve = curve.forget(allow_time_rev=True)
             cnum = 0
-            for bm in curve.gen_allowed_maps(cnum):
-                scurve = curve.specify(cnum, bm)
+            for bm in pcurve.gen_allowed_maps(cnum):
+                scurve = pcurve.specify(cnum, bm)
                 piece = scurve.get_fraction(cnum)
 
-        curve0 = self.curves[0]
+        curve0 = self.curves[0].forget()
         for c in FractalCurve.gen_possible_curves(curve0):
             c.check()
 
-        curve0 = curve0.changed(allow_time_rev=True)
+        curve0 = self.curves[0].forget(allow_time_rev=True)
         for c in FractalCurve.gen_possible_curves(curve0):
             c.check()
 
@@ -75,9 +76,11 @@ class TestCurve(unittest.TestCase):
                 self.assertEqual(orig.base_maps, current.base_maps)
 
     def test_junc(self):
-        for num, pcurve in enumerate(self.curves):
+        for num, curve in enumerate(self.curves):
             if num == 0:
-                pcurve = pcurve.changed(allow_time_rev=True)
+                pcurve = curve.forget(allow_time_rev=True)
+            else:
+                pcurve = curve.forget()
 
             junc_info = pcurve.get_junctions_info()
             for junc in junc_info:
