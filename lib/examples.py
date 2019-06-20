@@ -5,6 +5,30 @@ from base_map import BaseMap
 from utils import chain2proto, basis2base_map
 
 
+# Proceedings of the Steklov Institute of Mathematics, 2008, Vol. 263, pp. 236–256.
+# "Minimal Peano Curve" by E. V. Shchepin and K. E. Bauman
+def get_scepin_bauman_curve():
+    proto = (
+        (0, 0), (0, 1), (0, 2),
+        (1, 2), (1, 1), (1, 0),
+        (2, 0), (2, 1), (2, 2),
+    )
+    base_maps = [
+        BaseMap.id_map(dim=2),
+        BaseMap([1,0],[True,False]),  # rot(90)
+        BaseMap([1,0],[False,False]),  # (x,y)->(y,x)
+
+        BaseMap([0,1],[False,True]),  # (x,y)->(x,1-y)
+        BaseMap([1,0],[True,True]),  # (x,y)->(1-y,1-x)
+        BaseMap([1,0],[False,True]),  # rot(-90)
+
+        BaseMap.id_map(dim=2),
+        BaseMap(perm=[1,0],flip=[True,False]),  # rot(90)
+        BaseMap(perm=[1,0],flip=[False,False]),  # (x,y)->(y,x)
+    ]
+    return FractalCurve(dim=2, div=3, proto=proto, base_maps=base_maps)
+
+
 # Minimal 2D monofractal curve in L_1 (9)
 def get_hilbert_curve():
     """Example of fractal curve due to D.Hilbert."""
