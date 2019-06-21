@@ -160,7 +160,8 @@ class PartialFractalCurve:
                     pos2 = self.get_piece_position(cnum2)
                     yield pieces.CurvePieceBalancedPair(self, junc, pos1, pos2)
 
-    def estimate_ratio(self, ratio_func, rel_tol_inv, max_iter=None, sat_pack=100, find_model=False, verbose=False):
+    # если отношение кривой больше upper_bound, дальше не идём
+    def estimate_ratio(self, ratio_func, rel_tol_inv, upper_bound=None, max_iter=None, sat_pack=100, find_model=False, verbose=False):
         curr_lo = FastFraction(0, 1)
 
         # в качестве начально верхней оценки возьмём оценку для первой полной кривой
@@ -189,10 +190,8 @@ class PartialFractalCurve:
             else:
                 curr_lo = new_lo
 
-            # TODO apriori!!!!
-            #if curr_lo > best_up:
-            #    print('NO CHANCES!')
-            #    break
+            if upper_bound is not None and curr_lo > upper_bound:
+                return
 
         print('ratio in:', curr_lo, curr_up)
         data = self.test_ratio(
@@ -206,7 +205,7 @@ class PartialFractalCurve:
         return data
 
 
-    # если возвращает True (или кривую), то есть кривая с отношением < upper_bound
+    # если возвращает True (или кривую), то есть кривая с отношением <= upper_bound
     # если возвращает False, то нет кривой с отношением < lower_bound
     def test_ratio(self, ratio_func, lower_bound, upper_bound, max_iter=None, sat_pack=100, find_model=False, verbose=False):
         adapter = sat_adapters.CurveSATAdapter(dim=self.dim)

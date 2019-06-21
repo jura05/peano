@@ -380,7 +380,7 @@ class FractalCurve(partial_fractal_curves.PartialFractalCurve):
             if pair.junc is None or pair.junc in juncs:
                 yield pair
 
-    def estimate_ratio(self, ratio_func, rel_tol_inv=100, max_iter=10**6, use_vertex_brkline=False, verbose=False):
+    def estimate_ratio(self, ratio_func, rel_tol_inv=100, upper_bound=None, max_iter=None, use_vertex_brkline=False, verbose=False):
         curr_up = None
         curr_lo = FastFraction(0, 1)
 
@@ -400,10 +400,16 @@ class FractalCurve(partial_fractal_curves.PartialFractalCurve):
 
         curr_up = pairs_tree.data[0].up
         pairs_tree.set_good_threshold(curr_lo)
+        if verbose:
+            print('start bounds: ', curr_lo, curr_up)
 
         tolerance = FastFraction(rel_tol_inv + 1, rel_tol_inv)
+        iter_no = 0
         while curr_up > curr_lo * tolerance:
+            iter_no += 1
             if not pairs_tree.data:
+                break
+            if max_iter is not None and iter_no > max_iter:
                 break
             
             pairs_tree.divide()
