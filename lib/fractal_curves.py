@@ -391,9 +391,9 @@ class FractalCurve(partial_fractal_curves.PartialFractalCurve):
             if pair.junc is None or pair.junc in juncs:
                 yield pair
 
-    def estimate_ratio_new(self, ratio_func, rel_tol=0.01, max_iter=10**6, use_vertex_brkline=False, verbose=False):
+    def estimate_ratio(self, ratio_func, rel_tol_inv=100, max_iter=10**6, use_vertex_brkline=False, verbose=False):
         curr_up = None
-        curr_lo = 0
+        curr_lo = FastFraction(0, 1)
 
         pairs_tree_par = {}
         if use_vertex_brkline:
@@ -405,11 +405,11 @@ class FractalCurve(partial_fractal_curves.PartialFractalCurve):
 
         argmax = None
         for node in pairs_tree.data:
-            if float(node.lo) > curr_lo:
-                curr_lo = float(node.lo)
+            if node.lo > curr_lo:
+                curr_lo = node.lo
                 argmax = node.argmax
 
-        curr_up = float(pairs_tree.data[0].up)
+        curr_up = pairs_tree.data[0].up
         pairs_tree.set_good_threshold(curr_lo)
 
         for it in range(1, max_iter + 1):
@@ -419,20 +419,20 @@ class FractalCurve(partial_fractal_curves.PartialFractalCurve):
             pairs_tree.divide()
 
             for node in pairs_tree.data:
-                if float(node.lo) > curr_lo:
-                    curr_lo = float(node.lo)
+                if node.lo > curr_lo:
+                    curr_lo = node.lo
                     argmax = node.argmax
                     if verbose:
                         print('new lower bound: ', curr_lo, curr_up)
             pairs_tree.set_good_threshold(curr_lo)
 
-            new_up = float(pairs_tree.data[0].up)
+            new_up = pairs_tree.data[0].up
             if new_up < curr_up:
                 if verbose:
                     print('new upper bound: ', curr_lo, new_up)
                 curr_up = new_up
 
-            if curr_up < curr_lo * (1 + rel_tol):
+            if curr_up < curr_lo * FastFraction(rel_tol_inv + 1, rel_tol_inv):
                 break
 
         res = {'up': curr_up, 'lo': curr_lo}

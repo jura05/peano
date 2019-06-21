@@ -247,26 +247,28 @@ class PairsTree:
         self._inc = 0
 
     def set_good_threshold(self, thr):
+        assert isinstance(thr, FastFraction)
         self.good_threshold = thr
 
     def set_bad_threshold(self, thr):
+        assert isinstance(thr, FastFraction)
         self.bad_threshold = thr
 
     def add_pair(self, pair):
         lo, up, argmax = pair.get_bounds(self.ratio_func, brkline=self.brkline)
         gthr = self.good_threshold
-        if gthr is not None and float(up) < gthr:  # TOOD нет ли проблемы с округлением
+        if gthr is not None and up < gthr:
             self.stats['good'] += 1
             return
 
         bthr = self.bad_threshold
-        if bthr is not None and float(lo) > bthr:
+        if bthr is not None and lo > bthr:
             self.bad_pairs.append(pair)
             self.stats['bad'] += 1
             return
 
         self._inc += 1  # чтобы сравнение не проваливалось к парам
-        node = PairsTree.RichPair(priority=(-float(up), self._inc), pair=pair, lo=lo, up=up, argmax=argmax)
+        node = PairsTree.RichPair(priority=(-up, self._inc), pair=pair, lo=lo, up=up, argmax=argmax)
         heappush(self.data, node)
 
     def divide(self):
