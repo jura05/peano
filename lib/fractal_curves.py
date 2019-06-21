@@ -386,7 +386,8 @@ class FractalCurve(partial_fractal_curves.PartialFractalCurve):
 
         pairs_tree_par = {}
         if use_vertex_brkline:
-            pairs_tree_par['brkline'] = self.get_vertex_brkline()
+            pairs_tree_par['brkline'] = [(x, t) for x, t in self.get_vertex_moments().items()]
+            print(pairs_tree_par)
         pairs_tree = pieces.PairsTree(ratio_func, **pairs_tree_par)
 
         for pair in self.init_pairs_tree():

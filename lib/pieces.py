@@ -72,6 +72,15 @@ class CurvePiece:
         self.curve = curve
         self.pos = pos
 
+    def get_last_map(self):
+        curve = self.curve
+        dim, G = curve.dim, curve.genus
+        last_map = BaseMap.id_map(dim)
+        for cnum in self.pos.cnums:
+            cnum = last_map.apply_cnum(G, cnum)
+            last_map = last_map * curve.base_maps[cnum]  # именно в таком порядке!
+        return last_map
+
     # делим кривую дальше всеми способами
     def divide(self):
         curve = self.curve
@@ -137,8 +146,10 @@ class CurvePieceBalancedPair:
 
         use_brkline = (brkline is not None)
         if use_brkline:
-            brkline1 = brkline
-            brkline2 = brkline
+            last1 = self.piece1.get_last_map()
+            brkline1 = [(last1.apply_x(x), last1.apply_t(t)) for x, t in brkline]
+            last2 = self.piece2.get_last_map()
+            brkline2 = [(last2.apply_x(x), last2.apply_t(t)) for x, t in brkline]
 
         junc = self.junc
         if junc is None:
@@ -200,6 +211,7 @@ class CurvePieceBalancedPair:
         lo = FastFraction(*ratio_func(dim, max_dx, max_dt))
         up = FastFraction(*ratio_func(dim, max_dx, min_dt))
 
+
         argmax = None
         if use_brkline:
             for x1rel, t1rel in brkline1:
@@ -213,6 +225,12 @@ class CurvePieceBalancedPair:
                     dt = t2_final - t1_final
 
                     lo_final = Fraction(*ratio_func(dim, dx, dt))
+                    if lo_final > 80:
+                        print(pos1.cnums, pos1.cubes, pos2.cnums, pos2.cubes)
+                        print(junc)
+                        print(x1, t1, x2, t2)
+                        print(x1rel, t1rel, x2rel, t2rel)
+
                     lo_final = FastFraction(lo_final.numerator, lo_final.denominator)
                     if lo_final > lo:
                         x1_real = [Fraction(x1j, mx) for x1j in x1_final]
@@ -257,7 +275,7 @@ class PairsTree:
     def add_pair(self, pair):
         lo, up, argmax = pair.get_bounds(self.ratio_func, brkline=self.brkline)
         gthr = self.good_threshold
-        if gthr is not None and up <= gthr:  # DANGER: если float, то lo/up могут совпасть
+        if gthr is not None and up < gthr:
             self.stats['good'] += 1
             return
 
