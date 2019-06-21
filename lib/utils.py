@@ -1,5 +1,6 @@
 # coding: utf-8
 
+import math
 import re
 
 from base_map import BaseMap
@@ -83,3 +84,11 @@ def bmstr2base_map(bmstr):
     flip[1] = ('1-' in g2)
     
     return BaseMap(perm, flip, time_rev)
+
+
+def get_lcm(iterable):
+    """Least common multiple of integer sequence."""
+    lcm = 1
+    for x in iterable:
+        lcm = (lcm * x) // math.gcd(lcm, x)
+    return lcm
