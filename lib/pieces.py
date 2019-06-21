@@ -200,6 +200,7 @@ class CurvePieceBalancedPair:
         lo = FastFraction(*ratio_func(dim, max_dx, max_dt))
         up = FastFraction(*ratio_func(dim, max_dx, min_dt))
 
+        argmax = None
         if use_brkline:
             for x1rel, t1rel in brkline1:
                 t1_final = t1 + t1rel
@@ -214,9 +215,14 @@ class CurvePieceBalancedPair:
                     lo_final = Fraction(*ratio_func(dim, dx, dt))
                     lo_final = FastFraction(lo_final.numerator, lo_final.denominator)
                     if lo_final > lo:
+                        x1_real = [Fraction(x1j, mx) for x1j in x1_final]
+                        x2_real = [Fraction(x2j, mx) for x2j in x2_final]
+                        t1_real = Fraction(t1_final, mt)
+                        t2_real = Fraction(t2_final, mt)
+                        argmax = {'x1': x1_real, 't1': t1_real, 'x2': x2_real, 't2': t2_real, 'junc': junc}
                         lo = lo_final
 
-        return lo, up
+        return lo, up, argmax
 
 
 # пары фракций с приоритетом
@@ -227,6 +233,7 @@ class PairsTree:
         'pair',  # CurvePieceBalancedPair
         'up',  # upper_bound
         'lo',  # lower_bound
+        'argmax',
     ])
 
     def __init__(self, ratio_func, brkline=None):
@@ -246,7 +253,7 @@ class PairsTree:
         self.bad_threshold = thr
 
     def add_pair(self, pair):
-        lo, up = pair.get_bounds(self.ratio_func, brkline=self.brkline)
+        lo, up, argmax = pair.get_bounds(self.ratio_func, brkline=self.brkline)
         gthr = self.good_threshold
         if gthr is not None and float(up) < gthr:  # TOOD нет ли проблемы с округлением
             self.stats['good'] += 1
@@ -259,7 +266,7 @@ class PairsTree:
             return
 
         self._inc += 1  # чтобы сравнение не проваливалось к парам
-        node = PairsTree.RichPair(priority=(-float(up), self._inc), pair=pair, up=up, lo=lo)
+        node = PairsTree.RichPair(priority=(-float(up), self._inc), pair=pair, lo=lo, up=up, argmax=argmax)
         heappush(self.data, node)
 
     def divide(self):
