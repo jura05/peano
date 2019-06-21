@@ -257,7 +257,7 @@ class PairsTree:
     def add_pair(self, pair):
         lo, up, argmax = pair.get_bounds(self.ratio_func, brkline=self.brkline)
         gthr = self.good_threshold
-        if gthr is not None and up < gthr:
+        if gthr is not None and up <= gthr:  # DANGER: если float, то lo/up могут совпасть
             self.stats['good'] += 1
             return
 

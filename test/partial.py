@@ -8,7 +8,6 @@ import sys
 import os
 sys.path.append(os.path.dirname(sys.argv[0]) + '/../lib')
 
-from fractal_curves import FractalCurve
 from examples import *
 
 class TestCurve(unittest.TestCase):
@@ -35,11 +34,11 @@ class TestCurve(unittest.TestCase):
                 piece = scurve.get_fraction(cnum)
 
         curve0 = self.curves[0].forget()
-        for c in FractalCurve.gen_possible_curves(curve0):
+        for c in curve0.gen_possible_curves():
             c.check()
 
         curve0 = self.curves[0].forget(allow_time_rev=True)
-        for c in FractalCurve.gen_possible_curves(curve0):
+        for c in curve0.gen_possible_curves():
             c.check()
 
     def test_apply_base_map_unit(self):
@@ -87,7 +86,7 @@ class TestCurve(unittest.TestCase):
                 if any(dx not in set([0,1,-1]) for dx in junc.delta_x):
                     raise Exception("Bad delta!")
 
-            for curve in FractalCurve.gen_possible_curves(pcurve):
+            for curve in pcurve.gen_possible_curves():
                 juncs = curve.get_junctions()
                 # проверяем, что для каждого найденного стыка есть порождающая кривая
                 for junc in juncs:

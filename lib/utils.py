@@ -2,8 +2,10 @@
 
 import math
 import re
+from fractions import Fraction
 
-from base_maps import BaseMap
+from base_maps import BaseMap, gen_constraint_cube_maps
+from partial_fractal_curves import PartialFractalCurve
 
 
 def ratio_linf(d, dv, dt):
@@ -84,6 +86,38 @@ def bmstr2base_map(bmstr):
     flip[1] = ('1-' in g2)
     
     return BaseMap(perm, flip, time_rev)
+
+
+def get_pcurve_for_brkline(dim, div, brkline, allow_time_rev):
+    proto = [brk[0] for brk in brkline]
+
+    cube_first, entr_first, _ = brkline[0]
+    entr = tuple(Fraction(cj + ej, div) for cj, ej in zip(cube_first, entr_first))
+
+    cube_last, _, exit_last = brkline[-1]
+    exit = tuple(Fraction(cj + ej, div) for cj, ej in zip(cube_last, exit_last))
+
+    symmetries = []
+    for bm in gen_constraint_cube_maps(dim, {entr: entr, exit: exit}):
+        symmetries.append(bm)
+    if allow_time_rev:
+        for bm in gen_constraint_cube_maps(dim, {entr: exit, exit: entr}):
+            symmetries.append(bm.reverse_time())
+
+    base_maps = [None] * len(proto)
+    repr_maps = [None] * len(proto)
+
+    for cnum, brk in enumerate(brkline):
+        cube, rel_entr, rel_exit = brk
+        repr_maps[cnum] = next(gen_constraint_cube_maps(dim, {entr: rel_entr, exit: rel_exit}))
+
+    return PartialFractalCurve(
+        dim=dim, div=div,
+        proto=proto,
+        base_maps=base_maps,
+        repr_maps=repr_maps,
+        symmetries=symmetries,
+    )
 
 
 def get_lcm(iterable):

@@ -2,8 +2,10 @@ import time
 from fractions import Fraction
 import itertools
 
+from fast_fractions import FastFraction
 import sat_adapters
 import pieces
+import fractal_curves
 
 
 class PartialFractalCurve:
@@ -66,6 +68,16 @@ class PartialFractalCurve:
         repr_map = self.repr_maps[cnum]
         for symm in self.symmetries:
             yield repr_map * symm
+
+    def gen_possible_curves(self):
+        bm_variants = [self.gen_allowed_maps(cnum) for cnum in range(self.genus)]
+        for base_maps in itertools.product(*bm_variants):
+            yield fractal_curves.FractalCurve(
+                dim=self.dim,
+                div=self.div,
+                proto=self.proto,
+                base_maps=base_maps,
+            )
 
     def get_piece_position(self, cnum):
         return pieces.CurvePiecePosition(
@@ -148,8 +160,55 @@ class PartialFractalCurve:
                     pos2 = self.get_piece_position(cnum2)
                     yield pieces.CurvePieceBalancedPair(self, junc, pos1, pos2)
 
-    # upper_bound - если кривая лучше - нам подходит
-    def estimate_ratio(self, ratio_func, lower_bound, upper_bound, max_iter=10**9, log_pack=100, sat_pack=100, find_model=False, verbose=False):
+    def estimate_ratio(self, ratio_func, rel_tol_inv, max_iter=None, sat_pack=100, find_model=False, verbose=False):
+        curr_lo = FastFraction(0, 1)
+
+        # в качестве начально верхней оценки возьмём оценку для первой полной кривой
+        curve0 = next(self.gen_possible_curves())
+        curr_up = curve0.estimate_ratio(ratio_func, rel_tol_inv=rel_tol_inv)['up']
+
+        # инвариант: лучшая кривая в данном классе лежит в [curr_lo, curr_up]
+
+        # делаем аналог bisect для поиска хорошей кривой
+        tolerance = FastFraction(rel_tol_inv + 1, rel_tol_inv)
+        while curr_up > curr_lo * tolerance:
+            new_lo = FastFraction(2, 3) * curr_lo + FastFraction(1, 3) * curr_up
+            new_up = FastFraction(1, 3) * curr_lo + FastFraction(2, 3) * curr_up
+            print('best in ', float(curr_lo), float(curr_up), 'seek with thresholds:', float(new_lo), float(new_up))
+            has_good = self.test_ratio(
+                ratio_func,
+                lower_bound=new_lo,
+                upper_bound=new_up,
+                max_iter=max_iter,
+                sat_pack=sat_pack,
+                find_model=False,
+                verbose=verbose,
+            )
+            if has_good:
+                curr_up = new_up
+            else:
+                curr_lo = new_lo
+
+            # TODO apriori!!!!
+            #if curr_lo > best_up:
+            #    print('NO CHANCES!')
+            #    break
+
+        print('ratio in:', curr_lo, curr_up)
+        data = self.test_ratio(
+            ratio_func,
+            lower_bound=curr_lo,
+            upper_bound=curr_up,
+            sat_pack=sat_pack,
+            find_model=find_model,
+            verbose=verbose,
+        )
+        return data
+
+
+    # если возвращает True (или кривую), то есть кривая с отношением < upper_bound
+    # если возвращает False, то нет кривой с отношением < lower_bound
+    def test_ratio(self, ratio_func, lower_bound, upper_bound, max_iter=None, sat_pack=100, find_model=False, verbose=False):
         adapter = sat_adapters.CurveSATAdapter(dim=self.dim)
         adapter.init_curve(self)
 
@@ -160,9 +219,13 @@ class PartialFractalCurve:
         for pair in self.init_pairs_tree():
             pairs_tree.add_pair(pair)
 
-        it = 0
-        while it < max_iter:
-            it += 1
+        iter_no = 0
+        while True:
+            iter_no += 1
+            if max_iter is not None and iter_no > max_iter:
+                print('used all iterations...')
+                return None
+
             pairs_tree.divide()
             while pairs_tree.bad_pairs:
                 bad_pair = pairs_tree.bad_pairs.pop()
@@ -171,27 +234,23 @@ class PartialFractalCurve:
             if not pairs_tree.data:
                 break
 
-            if it % log_pack == 0 and verbose:
+            if iter_no % 1000 == 0 and verbose:
                 worst_node = pairs_tree.data[0]
                 worst_pair = worst_node.pair
                 print({
-                    'iter': it,
+                    'iter': iter_no,
                     'pairs': len(pairs_tree.data),
-                    'pqstats:': pairs_tree.stats,
+                    'pair_tree_stats:': pairs_tree.stats,
                     'up': float(worst_node.up),
                     'depth': (worst_pair.pos1.depth, worst_pair.pos2.depth),
                 })
 
-            if it % sat_pack == 0:
+            if iter_no % sat_pack == 0:
                 if verbose:
-                    print('iter:', it, 'adapter stats:', adapter.stats())
+                    print('iter:', iter_no, 'adapter stats:', adapter.stats())
                 if not adapter.solve():
                     print('no SAT model')
                     return False
-
-        if it == max_iter:
-            print('used all iterations...')
-            return False
 
         if not adapter.solve():
             print('no SAT model')

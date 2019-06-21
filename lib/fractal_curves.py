@@ -2,9 +2,9 @@
 
 import itertools
 from fractions import Fraction
-from fast_fractions import FastFraction
 
 from base_maps import BaseMap, gen_constraint_cube_maps
+from fast_fractions import FastFraction
 import partial_fractal_curves
 import pieces
 
@@ -299,17 +299,6 @@ class FractalCurve(partial_fractal_curves.PartialFractalCurve):
                 msg = 'exit does not correspond to entrance at ' + str(i)
                 raise Exception(msg)
 
-    @classmethod
-    def gen_possible_curves(cls, curve):
-        bm_variants = [curve.gen_allowed_maps(cnum) for cnum in range(curve.genus)]
-        for base_maps in itertools.product(*bm_variants):
-            yield cls(
-                dim=curve.dim,
-                div=curve.div,
-                proto=curve.proto,
-                base_maps=base_maps,
-            )
-
     def forget(self, allow_time_rev=False):
         entr = self.get_entrance()
         exit = self.get_exit()
@@ -412,7 +401,8 @@ class FractalCurve(partial_fractal_curves.PartialFractalCurve):
         curr_up = pairs_tree.data[0].up
         pairs_tree.set_good_threshold(curr_lo)
 
-        for it in range(1, max_iter + 1):
+        tolerance = FastFraction(rel_tol_inv + 1, rel_tol_inv)
+        while curr_up > curr_lo * tolerance:
             if not pairs_tree.data:
                 break
             
@@ -431,9 +421,6 @@ class FractalCurve(partial_fractal_curves.PartialFractalCurve):
                 if verbose:
                     print('new upper bound: ', curr_lo, new_up)
                 curr_up = new_up
-
-            if curr_up < curr_lo * FastFraction(rel_tol_inv + 1, rel_tol_inv):
-                break
 
         res = {'up': curr_up, 'lo': curr_lo}
         if argmax is not None:

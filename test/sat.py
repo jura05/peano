@@ -9,7 +9,6 @@ import os
 sys.path.append(os.path.dirname(sys.argv[0]) + '/../lib')
 
 from examples import *
-from fractal_curves import FractalCurve
 from sat_adapters import CurveSATAdapter
 
 class TestCurve(unittest.TestCase):
@@ -21,7 +20,7 @@ class TestCurve(unittest.TestCase):
 
     def test_curves(self):
         for pcurve in self.curves:
-            for curve in FractalCurve.gen_possible_curves(pcurve):
+            for curve in pcurve.gen_possible_curves():
                 adapter = CurveSATAdapter(dim=pcurve.dim)
                 adapter.init_curve(pcurve)
                 model = adapter.get_model_from_curve(curve)

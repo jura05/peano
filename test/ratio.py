@@ -8,6 +8,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(sys.argv[0]) + '/../lib')
 
+from fast_fractions import FastFraction
 from examples import *
 import utils
 
@@ -77,13 +78,13 @@ class TestCurve(unittest.TestCase):
                 elif metric == 'linf':
                     func = utils.ratio_linf
 
-                res = curve.estimate_ratio_new(func, rel_tol=0.0001)
-                assert res['up'] <= ratio_up, 'metric {} up failed: {} > {}'.format(metric, res['up'], ratio_up)
-                assert res['lo'] >= ratio_lo, 'metric {} lo failed: {} < {}'.format(metric, res['lo'], ratio_lo)
+                res = curve.estimate_ratio(func, rel_tol_inv=10**4)
+                assert float(res['up']) <= ratio_up, 'metric {} up failed: {} > {}'.format(metric, res['up'], ratio_up)
+                assert float(res['lo']) >= ratio_lo, 'metric {} lo failed: {} < {}'.format(metric, res['lo'], ratio_lo)
 
     def test_pcurve_ratio(self):
         pcurve = get_peano5_curve().forget(allow_time_rev=True)
-        assert pcurve.estimate_ratio(utils.ratio_l2_squared, lower_bound=90, upper_bound=100)
+        assert pcurve.test_ratio(utils.ratio_l2_squared, lower_bound=FastFraction(90, 1), upper_bound=FastFraction(100, 1))
 
 
 if __name__ == "__main__":
