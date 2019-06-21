@@ -2,7 +2,7 @@ import time
 from fractions import Fraction
 import itertools
 
-import curve_sat_adapter 
+import sat_adapters
 import pieces
 
 
@@ -150,7 +150,7 @@ class PartialFractalCurve:
 
     # upper_bound - если кривая лучше - нам подходит
     def estimate_ratio(self, ratio_func, lower_bound, upper_bound, max_iter=10**9, log_pack=100, sat_pack=100, find_model=False, verbose=False):
-        adapter = curve_sat_adapter.CurveSATAdapter(dim=self.dim)
+        adapter = sat_adapters.CurveSATAdapter(dim=self.dim)
         adapter.init_curve(self)
 
         pairs_tree = pieces.PairsTree(ratio_func)

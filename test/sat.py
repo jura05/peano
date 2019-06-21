@@ -9,8 +9,8 @@ import os
 sys.path.append(os.path.dirname(sys.argv[0]) + '/../lib')
 
 from examples import *
-from fractal_curve import FractalCurve
-from curve_sat_adapter import CurveSATAdapter
+from fractal_curves import FractalCurve
+from sat_adapters import CurveSATAdapter
 
 class TestCurve(unittest.TestCase):
     def setUp(self):

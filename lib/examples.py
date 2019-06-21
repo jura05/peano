@@ -1,7 +1,7 @@
 # coding: utf-8
 
-from fractal_curve import FractalCurve
-from base_map import BaseMap
+from fractal_curves import FractalCurve
+from base_maps import BaseMap
 from utils import chain2proto, basis2base_map
 
 

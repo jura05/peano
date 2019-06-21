@@ -4,12 +4,12 @@ import itertools
 from fractions import Fraction
 from fast_fractions import FastFraction
 
-from base_map import BaseMap, gen_constraint_cube_maps
-from partial_fractal_curve import PartialFractalCurve, Junction
+from base_maps import BaseMap, gen_constraint_cube_maps
+import partial_fractal_curves
 import pieces
 
 
-class FractalCurve(PartialFractalCurve):
+class FractalCurve(partial_fractal_curves.PartialFractalCurve):
     """Class representing fractal peano curve in [0,1]^d.
     Params:
         div         positive integer, number of divisions of each side of the cube (characteristic of a curve)
@@ -322,7 +322,7 @@ class FractalCurve(PartialFractalCurve):
             for bm in gen_constraint_cube_maps(self.dim, {entr: exit, exit: entr}):
                 symmetries.append(bm.reverse_time())
 
-        return PartialFractalCurve(
+        return partial_fractal_curves.PartialFractalCurve(
             dim=self.dim,
             div=self.div,
             proto=self.proto,

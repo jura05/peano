@@ -11,10 +11,9 @@ from fractions import Fraction
 
 from utils import bmstr2base_map
 from examples import *
-from partial_fractal_curve import CurvePiecePosition, CurvePieceBalancedPair, PartialFractalCurve,  get_int_cube_with_cache
-from fractal_curve import FractalCurve
-from base_map import BaseMap, gen_constraint_cube_maps
-from curve_sat_adapter import CurveSATAdapter
+from partial_fractal_curves import PartialFractalCurve,  get_int_cube_with_cache
+from fractal_curves import FractalCurve
+from base_maps import BaseMap, gen_constraint_cube_maps
 from gen_curve import CurveGenerator
 
 #logging.basicConfig(level=logging.DEBUG)
@@ -273,28 +272,6 @@ def pristalno():
         print('NOT FOUND')
 
 
-def bauman():
-    proto = ((0, 0), (0, 1), (0, 2), (1, 2), (1, 1), (1, 0), (2, 0), (2, 1), (2, 2))
-    base_maps = [
-        BaseMap(perm=[1,0],flip=[False,False]),
-        BaseMap(perm=[1,0],flip=[True,False]),
-        BaseMap.id_map(dim=2),
-        BaseMap(perm=[1,0],flip=[False,True]),
-        BaseMap(perm=[1,0],flip=[True,True]),
-        BaseMap(perm=[0,1],flip=[False,True]),
-        BaseMap(perm=[1,0],flip=[False,False]),
-        BaseMap(perm=[1,0],flip=[True,False]),
-        BaseMap.id_map(dim=2),
-    ]
-    bauman = FractalCurve(dim=2, div=3, proto=proto, base_maps=base_maps)
-    bauman.estimate_ratio_vertex_brkline(ratio_l2, 3)
-
-    #good.estimate_ratio(ratio, rel_tol=0.002, verbose=1)
-    bauman = bauman.get_subdivision(1)
-    pcurve = bauman.forget()
-    pcurve = pcurve.changed(allow_time_rev=True)
-    pcurve.estimate_ratio(ratio_l2, lower_bound=32.2, upper_bound=32.1, sat_pack=1000, find_model=True)
-
 def test_perebor():
     conf = {
         'dim': 2,
@@ -391,8 +368,11 @@ if __name__ == "__main__":
         'sat_pack': 100,
         'allow_time_rev': True,
     }
+    curve = get_bauman_curve()
+    print(curve.estimate_ratio_new(ratio_l2, rel_tol=0.0001))
+
     #test_perebor()
-    triple_perebor(conf),
+    #triple_perebor(conf),
     #timings4()
     #perebor(conf)
     #bauman()

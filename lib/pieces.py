@@ -4,7 +4,7 @@ from heapq import heappop, heappush
 from fractions import Fraction
 
 from fast_fractions import FastFraction
-from base_map import BaseMap, gen_constraint_cube_maps
+from base_maps import BaseMap, gen_constraint_cube_maps
 
 
 @lru_cache(maxsize=2**20)
