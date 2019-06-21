@@ -28,6 +28,12 @@ class FastFraction:
     def __neg__(self):
         return FastFraction(-self.n, self.d)
 
+    def __mul__(self, other):
+        return FastFraction(self.n * other.n, self.d * other.d)
+
+    def __add__(self, other):
+        return FastFraction(self.n * other.d + other.n * self.d, self.d * other.d)
+
     def __float__(self):
         return self.n / self.d
 
