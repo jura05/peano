@@ -2,6 +2,7 @@
 
 import itertools
 from fractions import Fraction
+from utils import get_lcm
 
 from base_maps import BaseMap, gen_constraint_cube_maps
 from fast_fractions import FastFraction
@@ -386,7 +387,7 @@ class FractalCurve(partial_fractal_curves.PartialFractalCurve):
 
         pairs_tree_par = {}
         if use_vertex_brkline:
-            pairs_tree_par['brkline'] = [(x, t) for x, t in self.get_vertex_moments().items()]
+            pairs_tree_par['brkline'] = IntegerBrokenLine(self.dim, [(x, t) for x, t in self.get_vertex_moments().items()])
             print(pairs_tree_par)
         pairs_tree = pieces.PairsTree(ratio_func, **pairs_tree_par)
 
@@ -434,3 +435,20 @@ class FractalCurve(partial_fractal_curves.PartialFractalCurve):
             res['argmax'] = argmax
 
         return res
+
+
+class IntegerBrokenLine:
+    def __init__(self, dim, brkline):
+        denoms = set()
+        for x, t in brkline:
+            if isinstance(t, Fraction):
+                denoms.add(t.denominator)
+            for xj in x:
+                if isinstance(xj, Fraction):
+                    denoms.add(xj.denominator)
+        lcm = get_lcm(denoms)
+        lcm_x = lcm
+        lcm_t = lcm**dim
+        self.points = [([int(xj * lcm_x) for xj in x], int(t * lcm_t)) for x, t in brkline]
+        self.mx = lcm_x
+        self.mt = lcm_t

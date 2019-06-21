@@ -72,6 +72,7 @@ class CurvePiece:
         self.curve = curve
         self.pos = pos
 
+    # only for full fractal curves
     def get_last_map(self):
         curve = self.curve
         dim, G = curve.dim, curve.genus
@@ -133,7 +134,8 @@ class CurvePieceBalancedPair:
             for subpiece in self.piece1.divide():
                 yield type(self)(subpiece.curve, self.junc, subpiece.pos, self.pos2)
 
-    # brkline - ломаная, последовательность пар (x,t); x \in [0,1]^d, t \in [0,1]
+    # brkline - ломаная IntegerBrokenLine
+    #@profile
     def get_bounds(self, ratio_func, brkline=None):
         dim = self.curve.dim
         N = self.curve.div
@@ -146,10 +148,9 @@ class CurvePieceBalancedPair:
 
         use_brkline = (brkline is not None)
         if use_brkline:
-            last1 = self.piece1.get_last_map()
-            brkline1 = [(last1.apply_x(x), last1.apply_t(t)) for x, t in brkline]
-            last2 = self.piece2.get_last_map()
-            brkline2 = [(last2.apply_x(x), last2.apply_t(t)) for x, t in brkline]
+            # ломаные нужно поворачивать:(
+            brk1_bm = self.piece1.get_last_map()
+            brk2_bm = self.piece2.get_last_map()
 
         junc = self.junc
         if junc is None:
@@ -162,16 +163,14 @@ class CurvePieceBalancedPair:
             # junc: time_rev
             if junc.time_rev:
                 t1 = pos1.sub_genus - 1 - t1
-                if use_brkline:
-                    brkline1 = [(x, 1 - t) for x, t in brkline1]
+                if use_brkline: brk1_bm = brk1_bm.reverse_time()
 
             # junc: сначала поворот
             base_map = junc.base_map
             x2 = base_map.apply_cube(pos2.sub_div, x2)
             t2 = base_map.apply_cnum(pos2.sub_genus, t2)
+            if use_brkline: brk2_bm = base_map * brk2_bm
 
-            if use_brkline:
-                brkline2 = [(base_map.apply_x(x), base_map.apply_t(t)) for x, t in brkline2]
 
         # приведение к единому масштабу
         if l1 == l2:
@@ -211,9 +210,17 @@ class CurvePieceBalancedPair:
         lo = FastFraction(*ratio_func(dim, max_dx, max_dt))
         up = FastFraction(*ratio_func(dim, max_dx, min_dt))
 
-
         argmax = None
         if use_brkline:
+            brk_mx = brkline.mx
+            brk_mt = brkline.mt
+            brkline1 = [(brk1_bm.apply_x2(x, brk_mx), brk1_bm.apply_t2(t, brk_mt)) for x, t in brkline.points]
+            brkline2 = [(brk2_bm.apply_x2(x, brk_mx), brk2_bm.apply_t2(t, brk_mt)) for x, t in brkline.points]
+
+            t1 *= brk_mt
+            t2 *= brk_mt
+            x1 = [xj * brk_mx for xj in x1]
+            x2 = [xj * brk_mx for xj in x2]
             for x1rel, t1rel in brkline1:
                 t1_final = t1 + t1rel
                 x1_final = [x1j + x1relj for x1j, x1relj in zip(x1, x1rel)]
@@ -224,19 +231,12 @@ class CurvePieceBalancedPair:
                     dx = [x1j - x2j for x1j, x2j in zip(x1_final, x2_final)]
                     dt = t2_final - t1_final
 
-                    lo_final = Fraction(*ratio_func(dim, dx, dt))
-                    if lo_final > 80:
-                        print(pos1.cnums, pos1.cubes, pos2.cnums, pos2.cubes)
-                        print(junc)
-                        print(x1, t1, x2, t2)
-                        print(x1rel, t1rel, x2rel, t2rel)
-
-                    lo_final = FastFraction(lo_final.numerator, lo_final.denominator)
+                    lo_final = FastFraction(*ratio_func(dim, dx, dt))
                     if lo_final > lo:
-                        x1_real = [Fraction(x1j, mx) for x1j in x1_final]
-                        x2_real = [Fraction(x2j, mx) for x2j in x2_final]
-                        t1_real = Fraction(t1_final, mt)
-                        t2_real = Fraction(t2_final, mt)
+                        x1_real = [FastFraction(x1j, mx * brk_mx) for x1j in x1_final]
+                        x2_real = [FastFraction(x2j, mx * brk_mx) for x2j in x2_final]
+                        t1_real = FastFraction(t1_final, mt * brk_mt)
+                        t2_real = FastFraction(t2_final, mt * brk_mt)
                         argmax = {'x1': x1_real, 't1': t1_real, 'x2': x2_real, 't2': t2_real, 'junc': junc}
                         lo = lo_final
 

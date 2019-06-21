@@ -5,7 +5,7 @@ import re
 from fractions import Fraction
 
 from base_maps import BaseMap, gen_constraint_cube_maps
-from partial_fractal_curves import PartialFractalCurve
+import partial_fractal_curves
 
 
 def ratio_linf(d, dv, dt):
@@ -111,7 +111,7 @@ def get_pcurve_for_brkline(dim, div, brkline, allow_time_rev):
         cube, rel_entr, rel_exit = brk
         repr_maps[cnum] = next(gen_constraint_cube_maps(dim, {entr: rel_entr, exit: rel_exit}))
 
-    return PartialFractalCurve(
+    return partial_fractal_curves.PartialFractalCurve(
         dim=dim, div=div,
         proto=proto,
         base_maps=base_maps,

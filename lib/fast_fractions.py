@@ -34,6 +34,12 @@ class FastFraction:
     def __add__(self, other):
         return FastFraction(self.n * other.d + other.n * self.d, self.d * other.d)
 
+    def __sub__(self, other):
+        return self + (-other)
+
+    def __pow__(self, power):
+        return FastFraction(self.n**power, self.d**power)
+
     def __float__(self):
         return self.n / self.d
 
