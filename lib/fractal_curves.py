@@ -387,8 +387,8 @@ class FractalCurve(partial_fractal_curves.PartialFractalCurve):
 
         pairs_tree_par = {}
         if use_vertex_brkline:
-            pairs_tree_par['brkline'] = IntegerBrokenLine(self.dim, [(x, t) for x, t in self.get_vertex_moments().items()])
-            print(pairs_tree_par)
+            vertex_brkline = [(x, t) for x, t in self.get_vertex_moments().items()]
+            pairs_tree_par['brkline'] = IntegerBrokenLine(self.dim, vertex_brkline)
         pairs_tree = pieces.PairsTree(ratio_func, **pairs_tree_par)
 
         for pair in self.init_pairs_tree():
@@ -412,6 +412,7 @@ class FractalCurve(partial_fractal_curves.PartialFractalCurve):
             if not pairs_tree.data:
                 break
             if max_iter is not None and iter_no > max_iter:
+                # оставляем оценки, полученные на текущий момент
                 break
             
             pairs_tree.divide()
@@ -447,8 +448,8 @@ class IntegerBrokenLine:
                 if isinstance(xj, Fraction):
                     denoms.add(xj.denominator)
         lcm = get_lcm(denoms)
-        lcm_x = lcm
-        lcm_t = lcm**dim
-        self.points = [([int(xj * lcm_x) for xj in x], int(t * lcm_t)) for x, t in brkline]
-        self.mx = lcm_x
-        self.mt = lcm_t
+        mx = lcm
+        mt = lcm**dim
+        self.points = [([int(xj * mx) for xj in x], int(t * mt)) for x, t in brkline]
+        self.mx = mx
+        self.mt = mt

@@ -214,31 +214,31 @@ class CurvePieceBalancedPair:
         if use_brkline:
             brk_mx = brkline.mx
             brk_mt = brkline.mt
-            brkline1 = [(brk1_bm.apply_x2(x, brk_mx), brk1_bm.apply_t2(t, brk_mt)) for x, t in brkline.points]
-            brkline2 = [(brk2_bm.apply_x2(x, brk_mx), brk2_bm.apply_t2(t, brk_mt)) for x, t in brkline.points]
+            brkline1 = [(brk1_bm.apply_x(x, mx=brk_mx), brk1_bm.apply_t(t, mt=brk_mt)) for x, t in brkline.points]
+            brkline2 = [(brk2_bm.apply_x(x, mx=brk_mx), brk2_bm.apply_t(t, mt=brk_mt)) for x, t in brkline.points]
 
             t1 *= brk_mt
             t2 *= brk_mt
             x1 = [xj * brk_mx for xj in x1]
             x2 = [xj * brk_mx for xj in x2]
             for x1rel, t1rel in brkline1:
-                t1_final = t1 + t1rel
-                x1_final = [x1j + x1relj for x1j, x1relj in zip(x1, x1rel)]
+                t1_point = t1 + t1rel
+                x1_point = [x1j + x1relj for x1j, x1relj in zip(x1, x1rel)]
                 for x2rel, t2rel in brkline2:
-                    t2_final = t2 + t2rel * mt2
-                    x2_final = [x2j + x2relj * mx2 for x2j, x2relj in zip(x2, x2rel)]
+                    t2_point = t2 + t2rel * mt2
+                    x2_point = [x2j + x2relj * mx2 for x2j, x2relj in zip(x2, x2rel)]
 
-                    dx = [x1j - x2j for x1j, x2j in zip(x1_final, x2_final)]
-                    dt = t2_final - t1_final
+                    dx = [x1j - x2j for x1j, x2j in zip(x1_point, x2_point)]
+                    dt = t2_point - t1_point
 
-                    lo_final = FastFraction(*ratio_func(dim, dx, dt))
-                    if lo_final > lo:
-                        x1_real = [FastFraction(x1j, mx * brk_mx) for x1j in x1_final]
-                        x2_real = [FastFraction(x2j, mx * brk_mx) for x2j in x2_final]
-                        t1_real = FastFraction(t1_final, mt * brk_mt)
-                        t2_real = FastFraction(t2_final, mt * brk_mt)
+                    lo_point = FastFraction(*ratio_func(dim, dx, dt))
+                    if lo_point > lo:
+                        lo = lo_point
+                        x1_real = [FastFraction(x1j, mx * brk_mx) for x1j in x1_point]
+                        x2_real = [FastFraction(x2j, mx * brk_mx) for x2j in x2_point]
+                        t1_real = FastFraction(t1_point, mt * brk_mt)
+                        t2_real = FastFraction(t2_point, mt * brk_mt)
                         argmax = {'x1': x1_real, 't1': t1_real, 'x2': x2_real, 't2': t2_real, 'junc': junc}
-                        lo = lo_final
 
         return lo, up, argmax
 

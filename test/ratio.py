@@ -11,6 +11,7 @@ sys.path.append(os.path.dirname(sys.argv[0]) + '/../lib')
 from fast_fractions import FastFraction
 from examples import *
 import utils
+from gen_curve import CurveGenerator
 
 
 class TestCurve(unittest.TestCase):
@@ -85,6 +86,28 @@ class TestCurve(unittest.TestCase):
     def test_pcurve_ratio(self):
         pcurve = get_peano5_curve().forget(allow_time_rev=True)
         assert pcurve.test_ratio(utils.ratio_l2_squared, lower_bound=FastFraction(90, 1), upper_bound=FastFraction(100, 1))
+
+    def test_55_ratio(self):
+        good_proto = [
+            (0, 0), (0, 1), (1, 1), (1, 0), (2, 0),
+            (2, 1), (2, 2), (1, 2), (0, 2), (0, 3),
+            (0, 4), (1, 4), (1, 3), (2, 3), (2, 4),
+            (3, 4), (4, 4), (4, 3), (3, 3), (3, 2),
+            (4, 2), (4, 1), (3, 1), (3, 0), (4, 0),
+        ]
+
+        curve_gen = CurveGenerator(dim=2, div=5, hdist=1, max_cdist=1, verbose=1)
+        for brkline in curve_gen.generate_brklines():
+            proto = [brk[0] for brk in brkline]
+            if proto == good_proto:
+                brk0 = brkline
+                break
+
+        pcurve = utils.get_pcurve_for_brkline(2, 5, brk0, allow_time_rev=True)
+        curve = pcurve.estimate_ratio(utils.ratio_l2_squared, rel_tol_inv=10000, find_model=True)['curve']
+        ratio = curve.estimate_ratio(utils.ratio_l2_squared, rel_tol_inv=10000, use_vertex_brkline=True, verbose=False)
+
+        assert ratio['lo'] == (FastFraction(408, 73)**2)
 
 
 if __name__ == "__main__":

@@ -97,17 +97,12 @@ class BaseMap:
             oriented = not oriented
         return oriented
 
-    def apply_x(self, x):
-        """Apply isometry to a point x."""
-        return tuple(1-x[k] if b else x[k] for k, b in zip(self.perm, self.flip))
+    def apply_x(self, x, mx=1):
+        """Apply isometry to a point x of [0,1]^d."""
+        return tuple(mx-x[k] if b else x[k] for k, b in zip(self.perm, self.flip))
 
-    def apply_t(self, t):
-        return 1 - t if self.time_rev else t
-
-    # TODO: порядок аругментов!!!
-    def apply_x2(self, x, l):
-        """Apply isometry to a point x of [0,l]^d."""
-        return tuple(l-x[k] if b else x[k] for k, b in zip(self.perm, self.flip))
+    def apply_t(self, t, mt=1):
+        return mt - t if self.time_rev else t
 
     def apply_vec(self, v):
         """Apply linear part of isometry to a vector."""
