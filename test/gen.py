@@ -6,7 +6,7 @@ import unittest
 # run script from peano directory
 import sys
 import os
-sys.path.append(os.path.dirname(sys.argv[0]) + '/..')
+sys.path.append(os.path.dirname(sys.argv[0]) + '/../lib')
 
 import logging
 logging.basicConfig(level=0, stream=sys.stdout)

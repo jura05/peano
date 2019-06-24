@@ -1,10 +1,12 @@
+#!/usr/bin/env python3
+
 import unittest
 
 import sys
 import os
 from fractions import Fraction
 
-sys.path.append(os.path.dirname(sys.argv[0]) + '/..')
+sys.path.append(os.path.dirname(sys.argv[0]) + '/../lib')
 from base_map import BaseMap, PieceMap
 
 class TestBaseMap(unittest.TestCase):
@@ -17,7 +19,8 @@ class TestBaseMap(unittest.TestCase):
 
     def test_inv(self):
         bm = BaseMap(perm=[3,2,1,0], flip=[True,True,True,True])
-        self.assertEqual(bm * bm.inverse(), BaseMap(dim=4))
+        self.assertEqual(bm * bm.inverse(), BaseMap.id_map(dim=4))
+        self.assertEqual(bm, bm.reverse_time().reverse_time())
 
 
 class TestPieceMap(unittest.TestCase):

@@ -4,13 +4,16 @@ from fractions import Fraction
 import functools
 import itertools
 
+from sympy.combinatorics.permutations import Permutation
+
+
 class BaseMap:
     """Base map: isometry of cube and (possibly) time reversal.
     Immutable and hashable.
     Acts on function f:[0,1]->[0,1]^d as  Bf: [0,1]--B_t-->[0,1]--f-->[0,1]^d--B_x-->[0,1]^d
     """
 
-    def __init__(self, perm=None, flip=None, dim=None, time_rev=False):
+    def __init__(self, perm, flip, time_rev=False):
         """Create a BaseMap instance.
         Params:
         perm, flip: params, which define isometry of cube
@@ -19,37 +22,32 @@ class BaseMap:
                       define the map
                       (x_0,...,x_{d-1}) --> (f(b_0;x_{k_0}), ..., f(b_{d-1};x_{k_{d-1}})),
                       where f(b;x)=x if b is False, and 1-x otherwise
-          or
-        dim:        dimension only (defines identity map)
-
         time_rev:   time reversal (boolean), default: False
         """
 
-        if perm is None or flip is None:
-            if dim is None:
-                raise Exception("Can't init base_map: define perm, flip")
-            perm = list(range(dim))
-            flip = [False]*dim
-
-        assert len(perm) == len(flip)
         self.dim = len(perm)
 
         # store data in tuples to make object immutable
         self.perm = tuple(perm)
         self.flip = tuple(bool(b) for b in flip)
         self.time_rev = bool(time_rev)
+        self._data = (self.perm, self.flip, self.time_rev)
+        self._hash = hash(self._data)
+
+    @classmethod
+    def id_map(cls, dim):
+        perm = range(dim)
+        flip = [False] * dim
+        return cls(perm, flip)
 
     def cube_map(self):
-        return type(self)(self.perm, self.flip, False)
-
-    def _data(self):
-        return (self.perm, self.flip, self.time_rev)
+        return type(self)(self.perm, self.flip)
 
     def __eq__(self, other):
-        return self._data() == other._data()
+        return self._data == other._data
 
     def __hash__(self):
-        return hash(self._data())
+        return self._hash
 
     def __repr__(self):
         if self.dim > 3:
@@ -61,7 +59,7 @@ class BaseMap:
         s += ",".join([("1-{}" if b else "{}").format(letters[k]) for k, b in zip(self.perm, self.flip)])
         s += ")"
         if self.time_rev:
-            s += ",t->-t"
+            s += ",t->1-t"
         return s
 
     def __mul__(self, other):
@@ -88,16 +86,16 @@ class BaseMap:
             flip[k] = b
         return type(self)(perm, flip, self.time_rev)
 
+    def reverse_time(self):
+        return type(self)(self.perm, self.flip, not self.time_rev)
+
     def is_oriented(self):
-        assert self.dim == 2
         oriented = True
         for f in self.flip:
             if f: oriented = not oriented
-        if self.perm == (0, 1):
-            return oriented
-        else:
-            return not oriented
-
+        if Permutation(self.perm).signature() == -1:
+            oriented = not oriented
+        return oriented
 
     def apply_x(self, x):
         """Apply isometry to a point x."""
@@ -122,6 +120,9 @@ class BaseMap:
     def apply_edge(self, edge):
         """Apply isometry to an edge. Not implemented!"""
         pass
+
+    def apply_cnum(self, genus, cnum):
+        return genus - 1 - cnum if self.time_rev else cnum
 
 
 class PieceMap:
@@ -196,7 +197,7 @@ class PieceMap:
     @classmethod
     def id_map(cls, d):
         return cls(
-            base_map=BaseMap(dim=d),
+            base_map=BaseMap.id_map(d),
             shift=tuple(0 for j in range(d)),
             scale=1,
             time_shift=0,
@@ -204,25 +205,14 @@ class PieceMap:
         )
 
 
-# без учёта time_rev
-
-def list_base_maps(dim):
-    res = []
+def gen_base_maps(dim, time_rev=None):
+    time_rev_variants = [True, False] if time_rev is None else [time_rev]
     for perm in itertools.permutations(range(dim)):
         for flip in itertools.product([True, False], repeat=dim):
-            res.append(BaseMap(dim=dim, perm=perm, flip=flip, time_rev=False))
-    return res
+            for time_rev in time_rev_variants:
+                yield BaseMap(perm, flip, time_rev)
 
-def constraint_base_maps(dim, points_map, oriented=False):
-    res = []
-    for bm in list_base_maps(dim):
-        if oriented and not bm.is_oriented():
-            continue
-        good = True
-        for src, dst in points_map.items():
-            if bm.apply_x(src) != dst:
-                good = False
-                break
-        if good: res.append(bm)
-    return res
-
+def gen_constraint_cube_maps(dim, points_map):
+    for bm in gen_base_maps(dim, time_rev=False):
+        if all(bm.apply_x(src) == dst for src, dst in points_map.items()):
+            yield bm

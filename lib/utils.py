@@ -1,6 +1,19 @@
 # coding: utf-8
 
+import re
+
 from base_map import BaseMap
+
+
+def ratio_linf(d, dv, dt):
+    return (max(abs(x) for x in dv)**d, dt)
+
+def ratio_l1(d, dv, dt):
+    return (sum(abs(x) for x in dv)**d, dt)
+
+def ratio_l2_squared(d, dv, dt):
+    return (sum(x**2 for x in dv)**d, dt**2)
+
 
 def chain2proto(chain_code):
     """Convert chain code like 'ijK' to curve prototype."""
@@ -49,4 +62,24 @@ def basis2base_map(basis):
         perm[k] = l2i[lk]
         flip[k] = (l != lk)
 
-    return BaseMap(perm, flip, dim, time_rev)
+    return BaseMap(perm, flip, time_rev)
+
+def bmstr2base_map(bmstr):
+    if '1-t' in bmstr:
+        time_rev = True
+    else:
+        time_rev = False
+    match = re.match('\(x,y\)->\((.*),(.*)\)', bmstr)
+    if not match:
+        print('@@@',bmstr)
+        
+    g1, g2 = match.groups()
+    if 'x' in g1:
+        perm = [0, 1]
+    else:
+        perm = [1, 0]
+    flip = [False]*2
+    flip[0] = ('1-' in g1)
+    flip[1] = ('1-' in g2)
+    
+    return BaseMap(perm, flip, time_rev)

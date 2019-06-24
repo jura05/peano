@@ -1,14 +1,18 @@
 # coding: utf-8
 
+import itertools
 from heapq import heappop, heappush
 from fractions import Fraction
 from fast_fractions import FastFraction
 from math import gcd
 from collections import Counter
 
-from base_map import BaseMap, PieceMap
+from base_map import BaseMap, PieceMap, gen_constraint_cube_maps
+from partial_fractal_curve import PartialFractalCurve, Junction
+import pieces
 
-class FractalCurve:
+
+class FractalCurve(PartialFractalCurve):
     """Class representing fractal peano curve in [0,1]^d.
     Params:
         div         positive integer, number of divisions of each side of the cube (characteristic of a curve)
@@ -29,6 +33,7 @@ class FractalCurve:
         self.base_maps = tuple(base_maps)
         self.dim = dim if dim is not None else self.get_dim()
         self.div = div if div is not None else self.get_div()
+        self.genus = self.div ** self.dim
 
     def _data(self):
         return self.dim, self.div, self.proto, self.base_maps
@@ -44,63 +49,18 @@ class FractalCurve:
 
     def get_dim(self):
         return len(self.proto[0])
-    
-    def genus(self):
-        """Fractal genus of the curve."""
-        return self.div ** self.dim
 
+    def changed(self, proto=None, base_maps=None):
+        return type(self)(
+            dim=self.dim,
+            div=self.div,
+            proto=(proto if proto is not None else self.proto),
+            base_maps=(base_maps if base_maps is not None else self.base_maps),
+        )
+    
     #
     # Работа с базовыми преобразованиями и фракциями
     #
-
-    def reverse(self):
-        """Reverse time in a curve."""
-        return type(self)(
-            dim = self.dim,
-            div = self.div,
-
-            # прототип проходится в обратном порядке
-            proto = reversed(self.proto),
-
-            # базовые преобразования проходятся в обратном порядке
-            # сами по себе они не меняются:
-            #   - если обращения времени не было, то его и не будет
-            #   - изометрия куба не меняется, т.к. время не играет роли
-            base_maps = reversed(self.base_maps),
-        )
-
-    def apply_base_map(self, base_map):
-        """Apply base map to a fractal curve, return new curve."""
-
-        # можно разложить базовое преобразование в произведение (коммутирующих) 
-        # преобразований: обращение времени с тождественной изометрией  +  изометрии куба
-        if base_map.time_rev:
-            curve = self.reverse()
-            cube_map = base_map.cube_map()
-        else:
-            curve = self
-            cube_map = base_map
-
-        # применяем изометрию куба
-        inv = cube_map.inverse()
-        return type(self)(
-            dim = self.dim,
-            div = self.div,
-
-            # прототип подвергается изометрии
-            proto = [cube_map.apply_cube(curve.div, cube) for cube in curve.proto],
-
-            # базовые преобразования сопрягаются: действительно, чтобы получить
-            # из преобразованной кривой её фракцию, можно сделать так:
-            # - сначала вернуться к исходной кривой (inv)
-            # - применить преобразование исходной кривой для перехода к фракции (bm)
-            # - перейти к преобразованной кривой (cube_map)
-            base_maps = [cube_map * bm * inv for bm in curve.base_maps],
-        )
-
-    def get_fraction(self, cnum):
-        """Get fraction as a curve."""
-        return self.apply_base_map(self.base_maps[cnum])
 
     def get_subdivision(self, k=1):
         """Get k-th subdivision of a curve."""
@@ -157,29 +117,24 @@ class FractalCurve:
 
     def get_exit(self):
         """Exit of a curve, i.e. point f(1)."""
-        start, period = self._get_cubes(self.genus()-1)
+        start, period = self._get_cubes(self.genus-1)
         return self._get_cube_limit(start, period)
 
     def _get_cubes(self, cnum):
         # находим последовательность вложенных кубов, которая получится, если в каждой фракции брать куб с номером cnum
         # возвращает пару (непериодическая часть, периодическая часть)
-        cur_map = BaseMap(dim=self.dim)  # current curve = cur_map * self
+        cur_map = BaseMap.id_map(self.dim)  # current curve = cur_map * self
         cubes = []
         index = {}
 
         while True:
-            if cur_map.time_rev:
-                cur_cnum = -cnum
-            else:
-                cur_cnum = cnum
-            cube = cur_map.apply_cube(self.div, self.proto[cur_cnum])
+            cur_curve = self.apply_base_map(cur_map)
+            cube = cur_curve.proto[cnum]
+
             cubes.append(cube)
             index[cur_map] = len(cubes)-1
 
-            # сначала переходим из исходной кривой во фракцию, потом всё отображаем в текущую кривую
-            # можно было бы хранить cur_curve и писать cur_map = cur_curve.base_maps[cnum] * cur_map
-            cur_map = cur_map * self.base_maps[cur_cnum]
-
+            cur_map = cur_curve.base_maps[cnum] * cur_map
             if cur_map in index:
                 idx = index[cur_map]
                 return cubes[0:idx], cubes[idx:]
@@ -218,7 +173,7 @@ class FractalCurve:
         # локаная для кривой с обращенным временем
         brkline_rev = [(v,1-t) for v,t in reversed(brkline)]  # моменты при прохождении обратной кривой
         result = []
-        for cnum, cube, base_map in zip(range(self.genus()), self.proto, self.base_maps):
+        for cnum, cube, base_map in zip(range(self.genus), self.proto, self.base_maps):
             if base_map.time_rev:
                 curr_brkline = brkline_rev
             else:
@@ -228,7 +183,7 @@ class FractalCurve:
                 # сначала поворачиваем, потом переносим во фракцию
                 bv = base_map.apply_x(v)
                 real_bv = [Fraction(cube[j] + bv[j], self.div) for j in range(self.dim)]
-                real_t = Fraction(cnum + t, self.genus())
+                real_t = Fraction(cnum + t, self.genus)
                 result.append((real_bv, real_t))
 
         # удаляем дублирующиеся точки перехода
@@ -238,7 +193,7 @@ class FractalCurve:
                 # точка перехода
                 continue
             new_result.append(r)
-        assert len(new_result) == self.genus() * (2**self.dim-1) + 1
+        assert len(new_result) == self.genus * (2**self.dim-1) + 1
         return result
 
     def get_edge_touch(self, edge):
@@ -248,7 +203,7 @@ class FractalCurve:
         E.g., tuples (0,0,0) or (0,1,1) define vertices
         """
         curve = self
-        cur_map = BaseMap(dim=self.dim)  # curve = cur_map * self
+        cur_map = BaseMap.id_map(self.dim)  # curve = cur_map * self
         cnums = []
         index = {}
         while True:
@@ -286,7 +241,7 @@ class FractalCurve:
 
     def _get_time_limit(self, start, period):
         # задана начальная и периодическая последовательность номеров кубов, считаем время
-        return self._get_periodic_sum(start, period, self.genus())
+        return self._get_periodic_sum(start, period, self.genus)
 
     # считаем сумму:
     #   s_0/d + s_1/d^2 + ... + s_{k-1}/d^k (непериодическая часть = start) +
@@ -317,7 +272,7 @@ class FractalCurve:
         # dummy checks
         assert d > 0
         assert n > 0
-        assert len(self.proto) == self.genus(), 'bad proto length'
+        assert len(self.proto) == self.genus, 'bad proto length'
 
         for cube in self.proto:
             for j in range(d):
@@ -343,51 +298,145 @@ class FractalCurve:
         gates.append((curve_exit, None))
 
         for i in range(len(gates)-1):
-            assert gates[i][1] == gates[i+1][0], 'exit does not correspond to entrance'
+            if gates[i][1] != gates[i+1][0]:
+                msg = 'exit does not correspond to entrance at ' + str(i)
+                raise Exception(msg)
+
+    @classmethod
+    def gen_possible_curves(cls, curve):
+        bm_variants = [curve.gen_allowed_maps(cnum) for cnum in range(curve.genus)]
+        for base_maps in itertools.product(*bm_variants):
+            yield cls(
+                dim=curve.dim,
+                div=curve.div,
+                proto=curve.proto,
+                base_maps=base_maps,
+            )
+
+    def forget(self, allow_time_rev=False):
+        entr = self.get_entrance()
+        exit = self.get_exit()
+
+        symmetries = []
+        for bm in gen_constraint_cube_maps(self.dim, {entr: entr, exit: exit}):
+            symmetries.append(bm)
+            
+        if allow_time_rev:
+            for bm in gen_constraint_cube_maps(self.dim, {entr: exit, exit: entr}):
+                symmetries.append(bm.reverse_time())
+
+        return PartialFractalCurve(
+            dim=self.dim,
+            div=self.div,
+            proto=self.proto,
+            base_maps=[None for j in range(self.genus)],  # забыли BaseMap-ы!
+            repr_maps=self.base_maps,  # base_map-ы стали лишь представителями
+            symmetries=symmetries,
+        )
 
     #
-    # Стыки. Реализовано для кривых без обращения времени
+    # Стыки.
     #
+
+    def gen_junctions(self):
+        base_junctions = set(self.get_base_junction(cnum) for cnum in range(self.genus - 1))
+        yield from self.gen_junctions_from_base(base_junctions)
 
     def get_junctions(self):
-        """Junction is a pair (delta, base_map). Get all junctions of a curve."""
-        if any(bm.time_rev for bm in self.base_maps):
-            raise Exception("get_junctions not implemented for time reverse!")
-
-        junctions = set()
-
-        for i in range(self.genus()-1):
-            cube = self.proto[i]
-            next_cube = self.proto[i+1]
-            delta = tuple(nc-c for nc, c in zip(next_cube, cube))
-            junctions.add(self._get_std_junction(delta, self.base_maps[i], self.base_maps[i+1]))
-
-        to_derive = list(junctions)
-        while to_derive:
-            junction = to_derive.pop()
-            dj = self.get_derived_junction(junction)
-            if dj not in junctions:
-                junctions.add(dj)
-                to_derive.append(dj)
-
-        return junctions
-
-    def get_derived_junction(self, junction):
-        delta, base_map = junction
-        cube1 = self.proto[-1]
-        cube2 = base_map.apply_cube(self.div, self.proto[0])
-        der_delta = tuple(delta[k]*self.div + cube2[k] - cube1[k] for k in range(self.dim))
-        return self._get_std_junction(der_delta, self.base_maps[-1], base_map * self.base_maps[0])
-
-    # поворачиваем, чтобы обеспечить тождественное преобразование на первой фракции
-    @staticmethod
-    def _get_std_junction(delta, bm1, bm2):
-        bm1_inv = bm1.inverse()
-        return bm1_inv.apply_vec(delta), bm1_inv * bm2
+        return list(self.gen_junctions())
 
     #
     # Показатели гладкости кривой
     #
+
+    def estimate_ratio_simple(self, ratio_func, subdivision=0):
+        curve = self.get_subdivision(subdivision) if subdivision > 0 else self
+
+        gates = []
+        entr = [int(xj) for xj in self.get_entrance()]
+        exit = [int(xj) for xj in self.get_exit()]
+        for cnum, base_map in enumerate(curve.base_maps):
+            piece_entr = base_map.apply_x(entr)
+            piece_exit = base_map.apply_x(exit)
+            if base_map.time_rev:
+                piece_entr, piece_exit = piece_exit, piece_entr
+            gates.append((piece_entr, piece_exit))
+            
+        max_r = None
+        data = zip(range(curve.genus), curve.proto, gates)
+        it = 0
+        tot = curve.genus * (curve.genus - 1) // 2
+        for pair in itertools.combinations(data, 2):
+            it += 1
+            if it % 100000 == 0:
+                print('iter: {} of {} ({:.2f} %)'.format(it + 1, tot, 100 * (it + 1) / tot))
+            cnum1, cube1, gate1 = pair[0]
+            cnum2, cube2, gate2 = pair[1]
+
+            t1 = cnum1  # only entrance
+            x1 = [cube1j + entr1j for cube1j, entr1j in zip(cube1, gate1[0])]
+
+            t2 = cnum2  # only entrance
+            x2 = [cube2j + entr2j for cube2j, entr2j in zip(cube2, gate2[0])]
+
+            dx = [x1j - x2j for x1j, x2j in zip(x1, x2)]
+
+            r = FastFraction(*ratio_func(self.dim, dx, t2 - t1))
+            if max_r is None or r > max_r:
+                print('max_r:', max_r)
+                max_r = r
+
+        return max_r
+
+    def init_pairs_tree(self):
+        juncs = set(self.gen_junctions())
+        for pair in super().init_pairs_tree():
+            if pair.junc is None or pair.junc in juncs:
+                yield pair
+
+    def estimate_ratio_new(self, ratio_func, rel_tol=0.01, max_iter=10**6, verbose=False):
+        curr_up = None
+        curr_lo = 0
+
+        pairs_tree = pieces.PairsTree(ratio_func)
+
+        for pair in self.init_pairs_tree():
+            pairs_tree.add_pair(pair)
+
+        curr_lo = max(float(node.lo) for node in pairs_tree.data)
+        curr_up = float(pairs_tree.data[0].up)
+
+        pairs_tree.set_good_threshold(curr_lo)
+
+        for it in range(1, max_iter + 1):
+            if not pairs_tree.data:
+                break
+            
+            pairs_tree.divide()
+
+            new_lo = max(float(node.lo) for node in pairs_tree.data)
+            if new_lo > curr_lo:
+                if verbose:
+                    print('new lower bound: ', new_lo, curr_up)
+                curr_lo = new_lo
+            pairs_tree.set_good_threshold(curr_lo)
+
+            new_up = float(pairs_tree.data[0].up)
+            if new_up < curr_up:
+                if verbose:
+                    print('new upper bound: ', curr_lo, new_up)
+                curr_up = new_up
+
+            if curr_up < curr_lo * (1 + rel_tol):
+                break
+
+        return {'up': curr_up, 'lo': curr_lo, 'pairs_tree': pairs_tree}
+
+#
+#  OLD CODE 
+#
+#  DEPRECATED
+#
 
     class CurveBalancedPair:
         # работаем с парой фракций кривой
@@ -425,7 +474,7 @@ class FractalCurve:
 
         d = self.dim
         N = self.div
-        G = self.genus()
+        G = self.genus
 
         delta_x = pair.delta_x
         delta_t = pair.delta_t
@@ -506,6 +555,8 @@ class FractalCurve:
 
         return pairs
 
+
+
     def estimate_ratio(self, ratio_func, junctions=None, upper_bound=None, max_iter=None, rel_tol=None, find_argmax=False, verbose=0):
         """Estimate ratio of a curve for given junctions.
         Params:
@@ -538,12 +589,12 @@ class FractalCurve:
             raise Exception("Define max_iter or rel_tol!")
 
         if junctions is None:
-            junctions = self.get_junctions()
+            junctions = set(self.gen_junctions())
             junctions.add(None)
 
         d = self.dim
         N = self.div
-        G = self.genus()
+        G = self.genus
 
         # тут можно использовать другие ломаные
         self_brkline = self.get_vertex_brkline()
@@ -572,9 +623,9 @@ class FractalCurve:
             if junc is None:
                 delta_x = (0,) * d
                 delta_t = 0
-                junc_base_map = BaseMap(dim=self.dim)
+                junc_base_map = BaseMap.id_map(self.dim)
             else:
-                delta_x, junc_base_map = junc
+                delta_x, junc_base_map = junc.delta_x, junc.base_map
                 delta_t = 1
 
             start_pair = self.CurveBalancedPair(
@@ -716,7 +767,7 @@ class FractalCurve:
                             # v2, t2 считаем относительно второй фракции
                             junc = rich_pair['junc']
                             if junc is not None:
-                                orig_v2 = tuple(orig_v2[j] - junc[0][j] for j in range(d))
+                                orig_v2 = tuple(orig_v2[j] - junc.delta_x[j] for j in range(d))
                                 orig_t2 -= 1
                             argmax = {
                                 'v1': orig_v1, 't1': orig_t1,

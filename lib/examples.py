@@ -5,6 +5,30 @@ from base_map import BaseMap
 from utils import chain2proto, basis2base_map
 
 
+# Proceedings of the Steklov Institute of Mathematics, 2008, Vol. 263, pp. 236–256.
+# "Minimal Peano Curve" by E. V. Shchepin and K. E. Bauman
+def get_scepin_bauman_curve():
+    proto = (
+        (0, 0), (0, 1), (0, 2),
+        (1, 2), (1, 1), (1, 0),
+        (2, 0), (2, 1), (2, 2),
+    )
+    base_maps = [
+        BaseMap.id_map(dim=2),
+        BaseMap([1,0],[True,False]),  # rot(90)
+        BaseMap([1,0],[False,False]),  # (x,y)->(y,x)
+
+        BaseMap([0,1],[False,True]),  # (x,y)->(x,1-y)
+        BaseMap([1,0],[True,True]),  # (x,y)->(1-y,1-x)
+        BaseMap([1,0],[False,True]),  # rot(-90)
+
+        BaseMap.id_map(dim=2),
+        BaseMap(perm=[1,0],flip=[True,False]),  # rot(90)
+        BaseMap(perm=[1,0],flip=[False,False]),  # (x,y)->(y,x)
+    ]
+    return FractalCurve(dim=2, div=3, proto=proto, base_maps=base_maps)
+
+
 # Minimal 2D monofractal curve in L_1 (9)
 def get_hilbert_curve():
     """Example of fractal curve due to D.Hilbert."""
@@ -12,8 +36,8 @@ def get_hilbert_curve():
         proto=[(0, 0), (0, 1), (1, 1), (1, 0)],
         base_maps=[
             BaseMap([1, 0], [False, False]),  # (x,y)->(y,x)
-            BaseMap(dim=2),                   # (x,y)->(x,y)
-            BaseMap(dim=2),                   # (x,y)->(x,y)
+            BaseMap.id_map(2),                # (x,y)->(x,y)
+            BaseMap.id_map(2),                # (x,y)->(x,y)
             BaseMap([1, 0], [True, True]),    # (x,y)->(1-y,1-x)
         ],
     )
@@ -21,7 +45,7 @@ def get_hilbert_curve():
 
 def get_peano_curve():
     """Example of fractal curve due to G.Peano."""
-    id_map = BaseMap(dim=2)
+    id_map = BaseMap.id_map(2)
     x_map = BaseMap([0, 1], [True, False])  # (x,y)->(1-x,y)
     y_map = BaseMap([0, 1], [False, True])  # (x,y)->(x,1-y)
     xy_map = BaseMap([0, 1], [True, True])  # (x,y)->(1-x,1-y)
@@ -35,7 +59,7 @@ def get_peano_curve():
     )
 
 def get_peano5_curve():
-    id_map = BaseMap(dim=2)
+    id_map = BaseMap.id_map(2)
     x_map = BaseMap([0, 1], [True, False])  # (x,y)->(1-x,y)
     y_map = BaseMap([0, 1], [False, True])  # (x,y)->(x,1-y)
     xy_map = BaseMap([0, 1], [True, True])  # (x,y)->(1-x,1-y)
@@ -59,10 +83,11 @@ def get_peano5_curve():
 
 
 # Minimal 2D monofractal curve in L_inf (5.333) and L_2 (5.667)
+# equivalent to Scepin-Bauman curve
 def get_meurthe_curve():
 
     chain_code = 'jjiJJijj'
-    bases = ['ij','Ji','ij','jI','JI','iJ','ji','Ji','ij']
+    bases = ['ji','Ji','ij','jI','JI','iJ','ji','Ji','ij']
     return FractalCurve(
         proto=chain2proto(chain_code),
         base_maps=[basis2base_map(b) for b in bases],
@@ -109,8 +134,34 @@ def get_haverkort_curve_1():
         base_maps=[basis2base_map(b) for b in bases],
     )
 
+# Minimal 3D monofractal curve with time reversal in L_inf (12.4)
+# "An inventory of three-dimensional Hilbert space-filling curves", Herman Haverkort; Curve F (see p.13, p.18)
+# https://arxiv.org/abs/1109.2323
+# Curve A26, see p.10, p.15, p.18
+def get_haverkort_curve_A26():
+    """3-D curve with time reversal."""
+    proto = [(0,0,0), (0,0,1), (0,1,1), (0,1,0), (1,1,0), (1,1,1), (1,0,1), (1,0,0)]
+    base_maps = [
+        BaseMap([2, 1, 0], [False, False, False]),
+        BaseMap([2, 0, 1], [False, False, False]),
+        BaseMap([2, 0, 1], [False, True, False], time_rev=True),
+        BaseMap([0, 2, 1], [False, True, True]),
+        BaseMap([0, 2, 1], [True, True, True], time_rev=True),
+        BaseMap([2, 0, 1], [True, True, False]),
+        BaseMap([2, 0, 1], [True, False, False], time_rev=True),
+        BaseMap([1, 2, 0], [True, False, False], time_rev=True),
+    ]
+    return FractalCurve(
+        proto=proto,
+        base_maps=base_maps,
+    )
+
+
 
 # Minimal 3D monofractal curve with time reversal in L_1 (89.8) and L_2 (18.6)
+# "An inventory of three-dimensional Hilbert space-filling curves", Herman Haverkort;
+# https://arxiv.org/abs/1109.2323
+# Curve F, see p.13, p.15, p.18
 def get_haverkort_curve_2():
     """3-D curve with time reversal."""
     chain_code = 'kjKikJK'
@@ -132,24 +183,51 @@ def get_tokarev_curve():
 
 
 # Testing sample
+# TODO: добавить более наглядный rev
 def get_rev_curve():
-    """Curve with time reversal."""
+    """Curve with time reversal at some middle cube."""
     return FractalCurve(
         proto=[(0, 0), (0, 1), (1, 1), (1, 0)],
         base_maps=[
             BaseMap([1, 0], [False, False]),                # (x,y)->(y,x)
-            BaseMap([0, 1], [True, False], time_rev=True),  # (x,y)->(1-x,y), t->-t
-            BaseMap(dim=2),                                 # (x,y)->(x,y)
+            BaseMap([0, 1], [True, False], time_rev=True),  # (x,y)->(1-x,y), t->1-t
+            BaseMap.id_map(2),                              # (x,y)->(x,y)
             BaseMap([1, 0], [True, True]),                  # (x,y)->(1-y,1-x)
         ],
     )
+
+def get_rev2_curve():
+    """Curve with time reversal at first cube."""
+    return FractalCurve(
+        proto=[(0, 0), (0, 1), (1, 1), (1, 0)],
+        base_maps=[
+            BaseMap([1, 0], [False, True], time_rev=True),  # (x,y)->(y,1-x), t->1-t
+            BaseMap.id_map(2),                              # (x,y)->(x,y)
+            BaseMap.id_map(2),                              # (x,y)->(x,y)
+            BaseMap([1, 0], [True, True]),                  # (x,y)->(1-y,1-x)
+        ],
+    )
+
+def get_rev3_curve():
+    """Curve with time reversal at last cube."""
+    return FractalCurve(
+        proto=[(0, 0), (0, 1), (1, 1), (1, 0)],
+        base_maps=[
+            BaseMap([1, 0], [False, False]),                # (x,y)->(y,x)
+            BaseMap.id_map(2),                              # (x,y)->(x,y)
+            BaseMap.id_map(2),                              # (x,y)->(x,y)
+            BaseMap([1, 0], [True, False], time_rev=True),  # (x,y)->(1-y,x), t->1-t
+        ],
+    )
+
+# TODO: rev4
 
 
 # Discontinuous curve - beginning in square center
 def get_discontinuous_curve():
     return FractalCurve(
         proto=[(1, 1), (0, 1), (0, 0), (1, 0), (2, 0), (2, 1), (2, 2), (1, 2), (0, 2)],
-        base_maps=[BaseMap(dim=2)] * 9,
+        base_maps=[BaseMap.id_map(2)] * 9,
     )
 
 # Discontinuous curve

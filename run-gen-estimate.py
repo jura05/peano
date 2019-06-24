@@ -26,7 +26,7 @@ def submain(tasks_queue, results_queue):
         item = tasks_queue.get()
         if item['type'] == 'task':
             curve = item['curve']
-            res = curve.estimate_ratio(ratio_l2, rel_tol=0.01, upper_bound=item['upper_bound'], verbose=0)
+            res = curve.estimate_ratio(ratio_l2, rel_tol=0.002, upper_bound=item['upper_bound'], verbose=0)
             logging.info('processed curve, result: %s', res)
             results_queue.put(res)
         elif item['type'] == 'STOP':
@@ -43,7 +43,7 @@ def main():
         proc.start()
 
     seen_curves = processed_curves = 0
-    generator = gen_curve.CurveGenerator(div=6, exit=(1,0), allow_vertex_transit=False)
+    generator = gen_curve.CurveGenerator(dim=2, div=5, hdist=2, max_cdist=1, oriented=True)
     curves = list(generator.generate_curves())
     best_upper_bound = None
     processed_curves = 0
