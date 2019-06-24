@@ -45,8 +45,7 @@ def plot_curve(subdiv_n, dim, genus, sub_numb):
         sub1 = [row[0] for row in subdiv_n]
         sub2 = [row[1] for row in subdiv_n]
         plt.plot(sub1,sub2,'k')
-        
-        plt.savefig('curve_image.png')
+
 
     elif dim == 3:
     
@@ -65,7 +64,6 @@ def plot_curve(subdiv_n, dim, genus, sub_numb):
         sub2 = [row[1] for row in subdiv_n]
         sub3 = [row[2] for row in subdiv_n]
         ax.plot(sub1,sub2,sub3,'k')
-        
-        plt.savefig('curve_image.png')
+
 
 plot_curve(curve.get_subdivision(k=sub_numb).proto, curve.dim, curve.div**curve.dim, sub_numb)
