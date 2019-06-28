@@ -1,1 +1,1 @@
-Python library for peano fractal curves on d-dimensional cube.
+Python package "peano", implementin peano-like fractal curves on d-dimensional cube.
