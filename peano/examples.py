@@ -1,8 +1,8 @@
 # coding: utf-8
 
-from fractal_curves import FractalCurve
-from base_maps import BaseMap
-from utils import chain2proto, basis2base_map
+from .fractal_curves import FractalCurve
+from .base_maps import BaseMap
+from .utils import chain2proto, basis2base_map
 
 
 # Proceedings of the Steklov Institute of Mathematics, 2008, Vol. 263, pp. 236–256.

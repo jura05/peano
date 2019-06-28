@@ -3,15 +3,14 @@
 
 import unittest
 
-# run script from peano directory
 import sys
 import os
-sys.path.append(os.path.dirname(sys.argv[0]) + '/../lib')
+sys.path.append(os.path.dirname(sys.argv[0]) + '/..')
 
 import logging
 logging.basicConfig(level=0, stream=sys.stdout)
 
-from gen_curve import *
+from peano.gen_curve import *
 
 class TestGen(unittest.TestCase):
     def test_brkline1(self):

@@ -2,10 +2,10 @@ import time
 from fractions import Fraction
 import itertools
 
-from fast_fractions import FastFraction
-import sat_adapters
-import pieces
-import fractal_curves
+from .fast_fractions import FastFraction
+from . import sat_adapters
+from . import pieces
+from . import fractal_curves
 
 
 class PartialFractalCurve:

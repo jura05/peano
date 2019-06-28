@@ -3,8 +3,8 @@ from collections import Counter, namedtuple
 from heapq import heappop, heappush
 from fractions import Fraction
 
-from fast_fractions import FastFraction
-from base_maps import BaseMap, gen_constraint_cube_maps
+from .fast_fractions import FastFraction
+from .base_maps import BaseMap, gen_constraint_cube_maps
 
 
 @lru_cache(maxsize=2**20)

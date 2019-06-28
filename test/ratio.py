@@ -3,15 +3,14 @@
 
 import unittest
 
-# run script from peano directory
 import sys
 import os
-sys.path.append(os.path.dirname(sys.argv[0]) + '/../lib')
+sys.path.append(os.path.dirname(sys.argv[0]) + '/..')
 
-from fast_fractions import FastFraction
-from examples import *
-import utils
-from gen_curve import CurveGenerator
+from peano.fast_fractions import FastFraction
+from peano.examples import *
+from peano import utils
+from peano.gen_curve import CurveGenerator
 
 
 class TestCurve(unittest.TestCase):

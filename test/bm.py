@@ -6,8 +6,8 @@ import sys
 import os
 from fractions import Fraction
 
-sys.path.append(os.path.dirname(sys.argv[0]) + '/../lib')
-from base_maps import BaseMap
+sys.path.append(os.path.dirname(sys.argv[0]) + '/..')
+from peano.base_maps import BaseMap
 
 class TestBaseMap(unittest.TestCase):
 

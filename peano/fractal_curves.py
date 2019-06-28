@@ -2,12 +2,12 @@
 
 import itertools
 from fractions import Fraction
-from utils import get_lcm
 
-from base_maps import BaseMap, gen_constraint_cube_maps
-from fast_fractions import FastFraction
-import partial_fractal_curves
-import pieces
+from .utils import get_lcm
+from .base_maps import BaseMap, gen_constraint_cube_maps
+from .fast_fractions import FastFraction
+from . import partial_fractal_curves
+from . import pieces
 
 
 class FractalCurve(partial_fractal_curves.PartialFractalCurve):

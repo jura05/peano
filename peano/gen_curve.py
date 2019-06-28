@@ -6,8 +6,8 @@ from collections import namedtuple
 import logging
 import itertools
 
-import base_maps
-from fractal_curves import FractalCurve
+from . import base_maps
+from .fractal_curves import FractalCurve
 
 
 # head - квадрат конца пути

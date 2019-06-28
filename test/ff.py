@@ -5,8 +5,8 @@ import unittest
 import sys
 import os
 
-sys.path.append(os.path.dirname(sys.argv[0]) + '/../lib')
-from fast_fractions import FastFraction
+sys.path.append(os.path.dirname(sys.argv[0]) + '/..')
+from peano.fast_fractions import FastFraction
 
 class TestFF(unittest.TestCase):
 

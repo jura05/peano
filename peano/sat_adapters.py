@@ -3,8 +3,8 @@ import itertools
 
 from pysat.solvers import *
 
-import fractal_curves
-from base_maps import gen_base_maps
+from . import fractal_curves
+from .base_maps import gen_base_maps
 
 # clause = {var: True|False}
 # var - hashable, в числа переводится непосредственно перед вызовом солвера

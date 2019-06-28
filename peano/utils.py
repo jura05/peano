@@ -4,8 +4,8 @@ import math
 import re
 from fractions import Fraction
 
-from base_maps import BaseMap, gen_constraint_cube_maps
-import partial_fractal_curves
+from .base_maps import BaseMap, gen_constraint_cube_maps
+from . import partial_fractal_curves
 
 
 def ratio_linf(d, dv, dt):

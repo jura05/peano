@@ -3,12 +3,12 @@
 
 import unittest
 
-# run script from peano directory
+# run script from root directory
 import sys
 import os
-sys.path.append(os.path.dirname(sys.argv[0]) + '/../lib')
+sys.path.append(os.path.dirname(sys.argv[0]) + '/..')
 
-from examples import *
+from peano.examples import *
 
 class TestCurve(unittest.TestCase):
     def setUp(self):
