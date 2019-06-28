@@ -7,7 +7,7 @@ import logging
 import itertools
 
 from . import base_maps
-from .fractal_curves import FractalCurve
+from .curves import Curve
 
 
 # head - квадрат конца пути
@@ -304,7 +304,7 @@ class CurveGenerator:
             proto.append(cube)
 
         for bms in itertools.product(*bms_variants):
-            curve = FractalCurve(dim=self.dim, div=self.div, proto=proto, base_maps=bms)
+            curve = Curve(dim=self.dim, div=self.div, proto=proto, base_maps=bms)
             yield curve
             
 

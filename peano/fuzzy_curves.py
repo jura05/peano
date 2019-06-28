@@ -5,11 +5,11 @@ import itertools
 from .fast_fractions import FastFraction
 from . import sat_adapters
 from . import pieces
-from . import fractal_curves
+from . import curves
 
 
-class PartialFractalCurve:
-    # base_maps - list as in FractalCurve, may contain None
+class FuzzyCurve:
+    # base_maps - list as in Curve, may contain None
     # repr_maps - список представителей (coset representatives) base_map-ов, которые сохраняют вход-выход
     # symmetries - симметрии кривой
     def __init__(self, dim, div, proto, base_maps, repr_maps, symmetries):
@@ -72,7 +72,7 @@ class PartialFractalCurve:
     def gen_possible_curves(self):
         bm_variants = [self.gen_allowed_maps(cnum) for cnum in range(self.genus)]
         for base_maps in itertools.product(*bm_variants):
-            yield fractal_curves.FractalCurve(
+            yield curves.Curve(
                 dim=self.dim,
                 div=self.div,
                 proto=self.proto,

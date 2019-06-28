@@ -3,7 +3,7 @@ import itertools
 
 from pysat.solvers import *
 
-from . import fractal_curves
+from . import curves
 from .base_maps import gen_base_maps
 
 # clause = {var: True|False}
@@ -144,7 +144,7 @@ class CurveSATAdapter:
             allowed_by_model_variants.append(allowed_by_model)
 
         for base_maps in itertools.product(*allowed_by_model_variants):
-            full_curve = fractal_curves.FractalCurve(dim=curve.dim, div=curve.div, proto=curve.proto, base_maps=base_maps)
+            full_curve = curves.Curve(dim=curve.dim, div=curve.div, proto=curve.proto, base_maps=base_maps)
             has_bad_juncs = False
             for junc in full_curve.gen_junctions():
                 junc_var = self.get_junc_var(junc)
