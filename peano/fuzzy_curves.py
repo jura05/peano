@@ -6,9 +6,11 @@ from .fast_fractions import FastFraction
 from . import sat_adapters
 from . import pieces
 from . import curves
+from . import fuzzy_poly_curves
+from .common import Junction, Spec
 
 
-class FuzzyCurve:
+class FuzzyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
     # base_maps - list as in Curve, may contain None
     # repr_maps - список представителей (coset representatives) base_map-ов, которые сохраняют вход-выход
     # symmetries - симметрии кривой
@@ -142,12 +144,15 @@ class FuzzyCurve:
     #
 
     def init_pairs_tree(self):
+        #auto_junc = Junction.get_auto_junc(dim=self.dim)
+        # TODO:
+        auto_junc = None
         G = self.genus
         for cnum1 in range(G):
             for cnum2 in range(cnum1 + 2, G):
                 pos1 = self.get_piece_position(cnum1)
                 pos2 = self.get_piece_position(cnum2)
-                yield pieces.CurvePieceBalancedPair(self, None, pos1, pos2)
+                yield pieces.CurvePieceBalancedPair(self, auto_junc, pos1, pos2)
 
         for junc in self.get_junctions_info().keys():
             last_cnum1 = 0 if junc.time_rev else G - 1
@@ -306,7 +311,11 @@ class FuzzyCurve:
 
     def get_base_junction(self, cnum):
         delta = [c2j - c1j for c1j, c2j in zip(self.proto[cnum], self.proto[cnum + 1])]
-        return Junction(delta, self.base_maps[cnum], self.base_maps[cnum + 1])
+        return Junction.get_junc(
+            Spec(base_map=self.base_maps[cnum]),
+            Spec(base_map=self.base_maps[cnum + 1]),
+            delta,
+        )
 
     # возвращает стыки вместе с производными
     def gen_junctions_from_base(self, base_juncs):
@@ -340,28 +349,4 @@ class FuzzyCurve:
 
         der_delta = tuple(c2j + dxj * self.div - c1j for c1j, c2j, dxj in zip(cube1, cube2, junc.delta_x))
 
-        return Junction(der_delta, bm1, bm2)
-
-# стык двух фракций кривой
-# всегда приводим к стандартному виду:
-# первая фракция стандартной пространственной ориентации, но, возможно, с обращением времени (self.time_rev)
-# вторая фракция в ориентации self.base_map
-# куб второй фракции получается из куба первого сдвигом на delta_x \in {0,1,-1}^d
-class Junction:
-    def __init__(self, delta, bm1, bm2):
-        bm1_cube_inv = bm1.cube_map().inverse()
-        self.base_map = bm1_cube_inv * bm2
-        self.delta_x = bm1_cube_inv.apply_vec(delta)
-        self.time_rev = bm1.time_rev
-
-    def _data(self):
-        return (self.delta_x, self.time_rev, self.base_map)
-
-    def __eq__(self, other):
-        return self._data() == other._data()
-
-    def __hash__(self):
-        return hash(self._data())
-
-    def __repr__(self):
-        return '1: ' + ('t->1-t' if self.time_rev else '') + ', 2: ' + str(self.base_map) + ', --> ' + str(self.delta_x)
+        return Junction.get_junc(Spec(base_map=bm1), Spec(base_map=bm2), der_delta)
