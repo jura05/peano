@@ -144,9 +144,7 @@ class FuzzyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
     #
 
     def init_pairs_tree(self):
-        #auto_junc = Junction.get_auto_junc(dim=self.dim)
-        # TODO:
-        auto_junc = None
+        auto_junc = Junction.get_auto_junc(dim=self.dim)
         G = self.genus
         for cnum1 in range(G):
             for cnum2 in range(cnum1 + 2, G):

@@ -5,6 +5,7 @@ from pysat.solvers import *
 
 from . import curves
 from .base_maps import gen_base_maps
+from .common import Junction
 
 # clause = {var: True|False}
 # var - hashable, в числа переводится непосредственно перед вызовом солвера
@@ -16,8 +17,9 @@ class CurveSATAdapter:
         self.curve_vars = set()  # переменные кривых, условия для которых уже записаны
         self.var_no = {}
 
+        auto_junc = Junction.get_auto_junc(dim=dim)
         self.append_clause(
-            {self.get_junc_var(None): True},  # у каждой кривой есть автостык
+            {self.get_junc_var(auto_junc): True},  # у каждой кривой есть автостык
         )
 
     def get_bm_var(self, cnum, bm):

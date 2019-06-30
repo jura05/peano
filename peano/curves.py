@@ -7,10 +7,12 @@ from .utils import get_lcm
 from .base_maps import BaseMap, gen_constraint_cube_maps
 from .fast_fractions import FastFraction
 from . import fuzzy_curves
+from . import poly_curves
 from . import pieces
+from .common import Junction
 
 
-class Curve(fuzzy_curves.FuzzyCurve):
+class Curve(fuzzy_curves.FuzzyCurve, poly_curves.PolyCurve):
     """Class representing fractal peano curve in [0,1]^d.
     Params:
         div         positive integer, number of divisions of each side of the cube (characteristic of a curve)
@@ -329,9 +331,6 @@ class Curve(fuzzy_curves.FuzzyCurve):
         base_junctions = set(self.get_base_junction(cnum) for cnum in range(self.genus - 1))
         yield from self.gen_junctions_from_base(base_junctions)
 
-    def get_junctions(self):
-        return list(self.gen_junctions())
-
     #
     # Показатели гладкости кривой
     #
@@ -377,8 +376,9 @@ class Curve(fuzzy_curves.FuzzyCurve):
 
     def init_pairs_tree(self):
         juncs = set(self.gen_junctions())
+        auto_junc = Junction.get_auto_junc(dim=self.dim)
         for pair in super().init_pairs_tree():
-            if pair.junc is None or pair.junc in juncs:
+            if pair.junc == auto_junc or pair.junc in juncs:
                 yield pair
 
     def estimate_ratio(self, ratio_func, rel_tol_inv=100, upper_bound=None, max_iter=None, use_vertex_brkline=False, verbose=False):

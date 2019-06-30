@@ -153,24 +153,15 @@ class CurvePieceBalancedPair:
             brk2_bm = self.piece2.get_last_map()
 
         junc = self.junc
-        if junc is None:
-            junc_dt = 0
-            junc_dx = (0,) * dim
-        else:
-            junc_dt = 1
-            junc_dx = self.junc.delta_x
 
-            # junc: time_rev
-            if junc.time_rev:
-                t1 = pos1.sub_genus - 1 - t1
-                if use_brkline: brk1_bm = brk1_bm.reverse_time()
+        # junc: сначала base_maps
+        x1 = junc.spec1.base_map.apply_cube(pos1.sub_div, x1)
+        t1 = junc.spec1.base_map.apply_cnum(pos1.sub_genus, t1)
+        if use_brkline: brk1_bm = junc.spec1.base_map * brk1_bm
 
-            # junc: сначала поворот
-            base_map = junc.base_map
-            x2 = base_map.apply_cube(pos2.sub_div, x2)
-            t2 = base_map.apply_cnum(pos2.sub_genus, t2)
-            if use_brkline: brk2_bm = base_map * brk2_bm
-
+        x2 = junc.spec2.base_map.apply_cube(pos2.sub_div, x2)
+        t2 = junc.spec2.base_map.apply_cnum(pos2.sub_genus, t2)
+        if use_brkline: brk2_bm = junc.spec2.base_map * brk2_bm
 
         # приведение к единому масштабу
         if l1 == l2:
@@ -194,8 +185,8 @@ class CurvePieceBalancedPair:
         # time2: t2 <= t <= t2 + mt2, после сдвига: t2 + junc_dt * mt <= t <= t2 + mt2 + junc_dt * mt
 
         # junc: потом сдвиг
-        t2 += junc_dt * mt
-        x2 = [x2j + junc_dxj * mx for x2j, junc_dxj in zip(x2, junc_dx)]
+        t2 += junc.delta_t * mt
+        x2 = [x2j + junc_dxj * mx for x2j, junc_dxj in zip(x2, junc.delta_x)]
 
         max_dx = [None] * dim
         for j in range(dim):
