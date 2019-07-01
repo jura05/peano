@@ -4,16 +4,15 @@ from .base_maps import BaseMap
 from .common import Junction, Spec
 
 
+# pnum - выделенный шаблон, задаёт реальную кривую [0,1]->[0,1]^d
 class FuzzyPolyCurve:
-    def __init__(self, dim, div, patterns):
+    def __init__(self, dim, div, patterns, pnum=0):
         self.dim = dim
         self.div = div
         self.patterns = tuple(patterns)
         self.pattern_count = len(patterns)
+        self.pnum = pnum
         self.genus = div**dim
-
-    def __getitem__(self, pnum):
-        return self.patterns[pnum]
 
     #
     # Стыки - общие методы
@@ -41,7 +40,7 @@ class FuzzyPolyCurve:
                 to_derive.append(dj)
 
     def get_base_junction(self, pnum, cnum):
-        pattern = self[pnum]
+        pattern = self.patterns[pnum]
         delta_x = [c2j - c1j for c1j, c2j in zip(pattern.proto[cnum], pattern.proto[cnum + 1])]
         return Junction.get_junc(
             pattern.specs[cnum],
@@ -56,8 +55,8 @@ class FuzzyPolyCurve:
 
         spec1 = junc.spec1
         spec2 = junc.spec2
-        p1 = self[spec1.pnum]
-        p2 = self[spec2.pnum]
+        p1 = self.patterns[spec1.pnum]
+        p2 = self.patterns[spec2.pnum]
 
         cnum1 = 0 if spec1.base_map.time_rev else -1
         cnum2 = -1 if spec2.base_map.time_rev else 0
