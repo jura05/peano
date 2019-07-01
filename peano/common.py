@@ -3,6 +3,8 @@ from collections import namedtuple
 from .base_maps import BaseMap
 
 
+Pattern = namedtuple('Pattern', ['proto', 'specs'])
+
 class Spec:
     def __init__(self, base_map, pnum=0):
         self.base_map = base_map

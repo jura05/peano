@@ -7,7 +7,7 @@ from . import sat_adapters
 from . import pieces
 from . import curves
 from . import fuzzy_poly_curves
-from .common import Junction, Spec
+from .common import Junction, Spec, Pattern
 
 
 class FuzzyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
@@ -22,6 +22,10 @@ class FuzzyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
         self.repr_maps = tuple(repr_maps)
         self.symmetries = tuple(symmetries)
         self.genus = self.div ** self.dim
+
+        # to make parent methods work
+        self.patterns = [Pattern(proto=proto, specs=[Spec(base_map=bm) for bm in base_maps])]
+        self.pattern_count = 1
 
     # создать кривую с другим прототипом/base_maps/whatever
     def changed(self, proto=None, base_maps=None, repr_maps=None, symmetries=None):
@@ -301,50 +305,8 @@ class FuzzyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
         junc_curves = {}
 
         for cnum, curve in configs:
-            base_junc = curve.get_base_junction(cnum)
+            base_junc = curve.get_base_junction(cnum=cnum, pnum=0)
             for junc in curve.gen_junctions_from_base([base_junc]):
                 junc_curves.setdefault(junc, []).append(curve)
 
         return junc_curves
-
-    def get_base_junction(self, cnum):
-        delta = [c2j - c1j for c1j, c2j in zip(self.proto[cnum], self.proto[cnum + 1])]
-        return Junction.get_junc(
-            Spec(base_map=self.base_maps[cnum]),
-            Spec(base_map=self.base_maps[cnum + 1]),
-            delta,
-        )
-
-    # возвращает стыки вместе с производными
-    def gen_junctions_from_base(self, base_juncs):
-        for junc in base_juncs:
-            yield junc
-        seen = set(base_juncs)
-        to_derive = list(base_juncs)
-        while to_derive:
-            junc = to_derive.pop()
-            dj = self.get_derived_junction(junc)
-            if dj not in seen:
-                yield dj
-                seen.add(dj)
-                to_derive.append(dj)
-
-    def get_derived_junction(self, junc):
-        base_map = junc.base_map
-        cnum1 = 0 if junc.time_rev else -1
-        cnum2 = -1 if base_map.time_rev else 0
-
-        if self.base_maps[cnum1] is None or self.base_maps[cnum2] is None:
-            raise Exception("Can't get derivative: base_map not defined")
-
-        cube1 = self.proto[cnum1]
-        bm1 = self.base_maps[cnum1]
-        if junc.time_rev:
-            bm1 = bm1.reverse_time()
-
-        cube2 = base_map.apply_cube(self.div, self.proto[cnum2])
-        bm2 = base_map * self.base_maps[cnum2]
-
-        der_delta = tuple(c2j + dxj * self.div - c1j for c1j, c2j, dxj in zip(cube1, cube2, junc.delta_x))
-
-        return Junction.get_junc(Spec(base_map=bm1), Spec(base_map=bm2), der_delta)

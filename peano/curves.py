@@ -9,7 +9,7 @@ from .fast_fractions import FastFraction
 from . import fuzzy_curves
 from . import poly_curves
 from . import pieces
-from .common import Junction
+from .common import Junction, Spec, Pattern
 
 
 class Curve(fuzzy_curves.FuzzyCurve, poly_curves.PolyCurve):
@@ -34,6 +34,10 @@ class Curve(fuzzy_curves.FuzzyCurve, poly_curves.PolyCurve):
         self.dim = dim if dim is not None else self.get_dim()
         self.div = div if div is not None else self.get_div()
         self.genus = self.div ** self.dim
+
+        # to make parent methods work
+        self.patterns = [Pattern(proto=proto, specs=[Spec(base_map=bm) for bm in base_maps])]
+        self.pattern_count = 1
 
     def _data(self):
         return self.dim, self.div, self.proto, self.base_maps
@@ -322,14 +326,6 @@ class Curve(fuzzy_curves.FuzzyCurve, poly_curves.PolyCurve):
             repr_maps=self.base_maps,  # base_map-ы стали лишь представителями
             symmetries=symmetries,
         )
-
-    #
-    # Стыки.
-    #
-
-    def gen_junctions(self):
-        base_junctions = set(self.get_base_junction(cnum) for cnum in range(self.genus - 1))
-        yield from self.gen_junctions_from_base(base_junctions)
 
     #
     # Показатели гладкости кривой

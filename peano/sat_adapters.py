@@ -17,11 +17,6 @@ class CurveSATAdapter:
         self.curve_vars = set()  # переменные кривых, условия для которых уже записаны
         self.var_no = {}
 
-        auto_junc = Junction.get_auto_junc(dim=dim)
-        self.append_clause(
-            {self.get_junc_var(auto_junc): True},  # у каждой кривой есть автостык
-        )
-
     def get_bm_var(self, cnum, bm):
         return ('base_map', cnum, bm)
 
@@ -41,6 +36,10 @@ class CurveSATAdapter:
         # возможные base_map-ы:
         for cnum in range(curve.genus):
             self.make_only([self.get_bm_var(cnum, bm) for bm in curve.gen_allowed_maps(cnum)])
+
+        # автостыки - есть у каждой кривой
+        for junc in curve.gen_auto_junctions():
+            self.append_clause({self.get_junc_var(junc): True})
 
         # стыки
         for junc, curves in curve.get_junctions_info().items():
