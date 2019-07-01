@@ -1,8 +1,10 @@
 # coding: utf-8
 
+from .poly_curves import PolyCurve
 from .curves import Curve
 from .base_maps import BaseMap
 from .utils import chain2proto, basis2base_map
+from .common import Pattern, Spec
 
 
 # Proceedings of the Steklov Institute of Mathematics, 2008, Vol. 263, pp. 236–256.
@@ -239,9 +241,11 @@ def get_morton_curve():
         base_maps=[basis2base_map(b) for b in bases],
     )
 
-'''
-# Polyfractal curve (not realized)
+#
+# Polyfractal curves
+#
 
+"""
 
 # Tetrafractal curve
 def get_ARW_Curve(k):
@@ -256,24 +260,34 @@ def get_ARW_Curve(k):
         base_maps=[basis2base_map(b) for b in bases],
     )
 
+"""
 
 # Minimal 2D monofractal curve in L_1 (9), L_2 (5), L_inf (5)
 def get_beta_Omega_Curve():
-
-    chain_code = ['jiJ','jiJ'],
-    bases = [['1iJ0','1Ji0','1ji1','1IJ1'],
+    chain_code_list = ['jiJ','jiJ']
+    bases_list = [['1iJ0','1Ji0','1ji1','1IJ1'],
              ['1iJ0','1Ji0','1ji1','0jI0']]
-    return Curve(
-        proto=chain2proto(chain_code),
-        base_maps=[basis2base_map(b) for b in bases],
-    )
 
+    patterns = []
+    for chain_code, rich_bases in zip(chain_code_list, bases_list):
+        specs = []
+        for rich_basis in rich_bases:
+            pnum_str, basis = rich_basis[0], rich_basis[1:]
+            spec = Spec(base_map=basis2base_map(basis), pnum=int(pnum_str))
+            specs.append(spec)
+        proto = chain2proto(chain_code)
+        pattern = Pattern(proto=proto, specs=specs)
+        patterns.append(pattern)
+
+    return PolyCurve(dim=2, div=2, patterns=patterns)
+
+"""
 
 # Minimal 3D bifractal curve in L_inf (9.45)
 # Is minimal L_2 (18.3)?
 def get_neptunus_curve():
     
-    chain_code = ['kjKikJK','kiKjIki'],
+    chain_code = ['kjKikJK','kiKjIki']
     bases = [['0kji','1kji','1KiJ','1jKI','1ikj','1KJi','0kJI','1jKI'],
              ['0jki','1jki','1iKJ','0KiJ','1JiK','1IKj','0ikj','1ijk']]
     return Curve(
@@ -285,11 +299,11 @@ def get_neptunus_curve():
 # Is minimal L_1 (89.8) and L_2 (18.3)?
 def get_luna_curve():
     
-    chain_code = ['kjKikJK','kiKjIki'],
+    chain_code = ['kjKikJK','kiKjIki']
     bases = [['1ijk','0KJi','1KiJ','1jKI','1jik','1IKj','0kJI','1kJI'],
              ['1jik','0JKi','1iKJ','0KiJ','1KjI','1JIk','0ikj','1ikj']]
     return Curve(
         proto=chain2proto(chain_code),
         base_maps=[basis2base_map(b) for b in bases],
     )
-'''
+"""

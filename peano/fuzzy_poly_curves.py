@@ -8,14 +8,17 @@ class FuzzyPolyCurve:
     def __init__(self, dim, div, patterns):
         self.dim = dim
         self.div = div
-        self.patterns = patterns
+        self.patterns = tuple(patterns)
         self.pattern_count = len(patterns)
+        self.genus = div**dim
 
     def __getitem__(self, pnum):
         return self.patterns[pnum]
 
     #
     # Стыки - общие методы
+    #
+    # Все стыки = автостыки + базовые стыки + производные базовых стыков
     #
 
     # автостыки - они учитываются отдельно!
@@ -46,7 +49,11 @@ class FuzzyPolyCurve:
             delta_x,
         )
 
+    # производные стыки - не для автостыков!
     def get_derived_junction(self, junc):
+        if junc.delta_t != 1:
+            raise Exception("Derivative is defined for dt=1 junctions!")
+
         spec1 = junc.spec1
         spec2 = junc.spec2
         p1 = self[spec1.pnum]

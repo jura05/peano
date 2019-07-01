@@ -19,6 +19,9 @@ class Spec:
     def __hash__(self):
         return hash(self._data())
 
+    def __repr__(self):
+        return '{} * [{}]'.format(self.base_map, self.pnum)
+
 
 # TODO: автостыки - там только pnum ...
 
@@ -78,4 +81,4 @@ class Junction:
         return hash(self._data())
 
     def __repr__(self):
-        return '1: ' + ('t->1-t' if self.time_rev else '') + ', 2: ' + str(self.base_map) + ', --> ' + str(self.delta_x)
+        return '{} | dx={}, dt={} | {}'.format(self.spec1, self.delta_x, self.delta_t, self.spec2)
