@@ -100,6 +100,23 @@ class FuzzyPolyCurve:
 
         return self.changed(patterns=new_patterns)
 
+    def gen_allowed_specs(self, pnum, cnum):
+        raise NotImplementedError("Define in child class")
+
+    def specify(self, pnum, cnum, spec):
+        if spec not in self.gen_allowed_specs(pnum, cnum):
+            raise Exception("Can't specify curve")
+
+        new_specs = list(self.patterns[cnum].specs)
+        new_specs[cnum] = spec
+        new_pattern = (self.patterns[cnum].proto, new_specs)
+
+        new_patterns = list(self.patterns)
+        new_patterns[pnum] = new_pattern
+
+        return self.changed(patterns=new_patterns)
+
+
     #
     # Стыки - общие методы
     #

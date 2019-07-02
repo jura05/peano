@@ -89,3 +89,9 @@ class PolyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
 
     def get_junctions(self):
         return list(self.gen_junctions())
+
+    #
+
+    # кандидаты в self.base_maps[cnum]
+    def gen_allowed_specs(self, pnum, cnum):
+        yield self.patterns[pnum].specs[cnum]
