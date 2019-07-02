@@ -70,7 +70,7 @@ class TestCurve(unittest.TestCase):
                 orig = curve
                 current = curve
                 for bm in reversed(bms + [last_map]):
-                    current = current.apply_base_map(bm)
+                    current = bm * current
                 self.assertEqual(orig.proto, current.proto)
                 self.assertEqual(orig.base_maps, current.base_maps)
 

@@ -9,9 +9,13 @@ class PolyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
     # Для полностью заданной кривой можно определить все стыки
 
     def gen_base_junctions(self):
+        seen = set()
         for pnum in range(self.pattern_count):
             for cnum in range(self.genus - 1):
-                yield self.get_base_junction(cnum=cnum, pnum=pnum)
+                junc = self.get_base_junction(cnum=cnum, pnum=pnum)
+                if junc not in seen:
+                    yield junc
+                    seen.add(junc)
 
     def gen_junctions(self):
         yield from self.gen_junctions_from_base(list(self.gen_base_junctions()))

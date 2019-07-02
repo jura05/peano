@@ -94,7 +94,7 @@ class CurvePiece:
             cnum = prev_map.apply_cnum(G, cnum)
             prev_map = prev_map * curve.base_maps[cnum]  # именно в таком порядке!
 
-        prev_curve = curve.apply_base_map(prev_map)
+        prev_curve = prev_map * curve
         active_cnum = self.pos.cnums[-1]  # кубик, где всё происходит
         spec_cnum = prev_map.apply_cnum(G, active_cnum)
 
@@ -106,7 +106,7 @@ class CurvePiece:
             new_map = prev_map.inverse() * bm * prev_map
             specified_curve = curve.specify(spec_cnum, new_map)
 
-            last_curve = prev_curve.apply_base_map(bm)
+            last_curve = bm * prev_curve
             for cnum, cube in enumerate(last_curve.proto):
                 new_pos = self.pos.specify(cnum, cube)
                 new_piece = CurvePiece(specified_curve, new_pos)

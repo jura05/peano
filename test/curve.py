@@ -62,7 +62,7 @@ class TestCurve(unittest.TestCase):
         # произведение которых равно единичному, то мы получим исходную кривую
         bm_rev = BaseMap.id_map(dim=2).reverse_time()
         self.assertEqual(
-            get_hilbert_curve().apply_base_map(bm_rev).proto,
+            (bm_rev * get_hilbert_curve()).proto,
             ((1, 0), (1, 1), (0, 1), (0, 0)),
         )
 
@@ -95,7 +95,7 @@ class TestCurve(unittest.TestCase):
                 orig = curve
                 current = curve
                 for bm in reversed(bms + [last_map]):
-                    current = current.apply_base_map(bm)
+                    current = bm * current
                 self.assertEqual(orig.proto, current.proto)
                 self.assertEqual(orig.base_maps, current.base_maps)
 

@@ -132,7 +132,7 @@ class Curve(fuzzy_curves.FuzzyCurve, poly_curves.PolyCurve):
         index = {}
 
         while True:
-            cur_curve = self.apply_base_map(cur_map)
+            cur_curve = cur_map * self
             cube = cur_curve.proto[cnum]
 
             cubes.append(cube)
@@ -221,7 +221,7 @@ class Curve(fuzzy_curves.FuzzyCurve, poly_curves.PolyCurve):
             if cur_map in index:
                 period_start = index[cur_map]
                 break
-            curve = curve.apply_base_map(bm)
+            curve = bm * curve
 
         return self._get_time_limit(cnums[0:period_start], cnums[period_start:])
 

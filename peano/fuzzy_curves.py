@@ -8,7 +8,7 @@ from . import pieces
 from . import curves
 from . import fuzzy_poly_curves
 from .common import Junction, Pattern
-from .base_maps import Spec
+from .base_maps import Spec, BaseMap
 
 
 class FuzzyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
@@ -41,7 +41,7 @@ class FuzzyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
 
     def get_fraction(self, cnum):
         """Get fraction as a curve."""
-        return self.apply_base_map(self.base_maps[cnum])
+        return self.base_maps[cnum] * self
 
     def reverse(self):
         """Reverse time in a curve."""
@@ -102,15 +102,18 @@ class FuzzyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
         new_base_maps[cnum] = base_map
         return self.changed(base_maps=new_base_maps)
 
-    def apply_base_map(self, base_map):
+    def __rmul__(self, base_map):
         """Apply base map to a fractal curve, return new curve."""
+        if not isinstance(base_map, BaseMap):
+            return NotImplemented
+
         if base_map.dim != self.dim:
             raise Exception("Incompatible base map!")
 
         # можно разложить базовое преобразование в произведение (коммутирующих) 
         # преобразований: обращение времени с тождественной изометрией  +  изометрии куба
         if base_map.time_rev:
-            return self.reverse().apply_base_map(base_map.cube_map())
+            return base_map.cube_map() * self.reverse()
 
         # применяем изометрию куба
 
