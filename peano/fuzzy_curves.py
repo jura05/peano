@@ -46,8 +46,8 @@ class FuzzyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
         G = self.genus
         for cnum1 in range(G):
             for cnum2 in range(cnum1 + 2, G):
-                pos1 = self.get_piece_position(cnum1)
-                pos2 = self.get_piece_position(cnum2)
+                pos1 = self.get_piece_position(pnum=0, cnum=cnum1)
+                pos2 = self.get_piece_position(pnum=0, cnum=cnum2)
                 yield pieces.CurvePieceBalancedPair(self, auto_junc, pos1, pos2)
 
         for junc in self.get_junctions_info().keys():
@@ -57,8 +57,8 @@ class FuzzyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
                 for cnum2 in range(G):
                     if (cnum1, cnum2) == (last_cnum1, first_cnum2):
                         continue
-                    pos1 = self.get_piece_position(cnum1)
-                    pos2 = self.get_piece_position(cnum2)
+                    pos1 = self.get_piece_position(pnum=0, cnum=cnum1)
+                    pos2 = self.get_piece_position(pnum=0, cnum=cnum2)
                     yield pieces.CurvePieceBalancedPair(self, junc, pos1, pos2)
 
     # если отношение кривой больше upper_bound, дальше не идём

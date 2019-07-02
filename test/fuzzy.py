@@ -9,6 +9,7 @@ import os
 sys.path.append(os.path.dirname(sys.argv[0]) + '/..')
 
 from peano.examples import *
+from peano.base_maps import Spec
 
 class TestCurve(unittest.TestCase):
     def setUp(self):
@@ -30,7 +31,7 @@ class TestCurve(unittest.TestCase):
             pcurve = curve.forget(allow_time_rev=True)
             cnum = 0
             for bm in pcurve.gen_allowed_maps(cnum):
-                scurve = pcurve.specify(cnum, bm)
+                scurve = pcurve.specify(pnum=0, cnum=cnum, spec=Spec(bm))
                 piece = scurve.get_fraction(cnum)
 
         curve0 = self.curves[0].forget()
