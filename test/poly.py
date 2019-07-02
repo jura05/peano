@@ -21,8 +21,9 @@ class TestCurve(unittest.TestCase):
 
     def test_junc(self):
         for curve in self.curves:
-            juncs = list(curve.gen_junctions())
-            print('juncs:', len(juncs))
+            for jcnt, junc in enumerate(curve.gen_junctions()):
+                if jcnt > 100:
+                    raise Exception("Too many juncs!")
 
     def test_apply_base_map_unit(self):
         # проверяем, что если применить к кривой последовательно ряд преобразований,

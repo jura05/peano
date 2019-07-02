@@ -22,12 +22,8 @@ class Junction:
     # обычный стык
     @classmethod
     def get_junc(cls, spec1, spec2, delta_x):
-        if spec1.pnum > spec2.pnum:
-            # меняем местами
-            delta_x = tuple(-dj for dj in delta_x)
-            spec1, spec2 = spec2, spec1
-
-        if spec1.pnum == spec2.pnum and spec1.base_map.time_rev and spec2.base_map.time_rev:
+        if spec1.pnum > spec2.pnum \
+          or (spec1.pnum == spec2.pnum and spec1.base_map.time_rev and spec2.base_map.time_rev):
             # обращаем время и меняем местами
             delta_x = tuple(-dj for dj in delta_x)
             spec1, spec2 = spec2.reverse_time(), spec1.reverse_time()

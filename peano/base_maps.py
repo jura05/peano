@@ -161,7 +161,7 @@ class Spec:
         return hash(self._data())
 
     def __repr__(self):
-        return '{} * [{}]'.format(self.base_map, self.pnum)
+        return '{}[{}]'.format(self.base_map, self.pnum)
 
     def __mul__(self, other):
         if isinstance(other, BaseMap):
