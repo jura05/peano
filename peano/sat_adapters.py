@@ -145,7 +145,7 @@ class CurveSATAdapter:
             allowed_by_model_variants.append(allowed_by_model)
 
         for base_maps in itertools.product(*allowed_by_model_variants):
-            full_curve = curves.Curve(dim=curve.dim, div=curve.div, proto=curve.proto, base_maps=base_maps)
+            full_curve = curves.Curve(dim=curve.dim, div=curve.div, patterns=[(curve.proto, base_maps)])
             has_bad_juncs = False
             for junc in full_curve.gen_junctions():
                 junc_var = self.get_junc_var(junc)

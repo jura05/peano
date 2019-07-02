@@ -111,10 +111,9 @@ def get_pcurve_for_brkline(dim, div, brkline, allow_time_rev):
         cube, rel_entr, rel_exit = brk
         repr_maps[cnum] = next(gen_constraint_cube_maps(dim, {entr: rel_entr, exit: rel_exit}))
 
-    return fuzzy_curves.FuzzyCurve(
+    return fuzzy_curves.SymmFuzzyCurve(
         dim=dim, div=div,
-        proto=proto,
-        base_maps=base_maps,
+        patterns=[(proto, base_maps)],
         repr_maps=repr_maps,
         symmetries=symmetries,
     )

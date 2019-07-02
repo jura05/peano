@@ -147,7 +147,7 @@ def gen_constraint_cube_maps(dim, points_map):
 # BaseMap образует, по сути, подгруппу, не меняя шаблон
 class Spec:
     """BaseMap + pattern choice."""
-    def __init__(self, base_map, pnum):
+    def __init__(self, base_map, pnum=0):
         self.base_map = base_map
         self.pnum = pnum
 

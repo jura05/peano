@@ -29,12 +29,12 @@ class PolyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
 
         while True:
             cur_curve = cur_spec * self
-            cube = cur_curve.patterns[cur_curve.pnum].proto[cnum]  # TODOshechka
+            cube = cur_curve.proto[cnum]
 
             cubes.append(cube)
             index[cur_spec] = len(cubes)-1
 
-            cur_spec = cur_curve.patterns[cur_curve.pnum].specs[cnum] * cur_spec
+            cur_spec = cur_curve.specs[cnum] * cur_spec
 
             if cur_spec in index:
                 idx = index[cur_spec]

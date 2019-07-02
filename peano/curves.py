@@ -2,6 +2,7 @@
 
 import itertools
 from fractions import Fraction
+from collections import namedtuple
 
 from .utils import get_lcm
 from .base_maps import BaseMap, Spec, gen_constraint_cube_maps
@@ -9,35 +10,17 @@ from .fast_fractions import FastFraction
 from . import fuzzy_curves
 from . import poly_curves
 from . import pieces
-from .common import Junction, Pattern
+from .common import Junction
 
 
 class Curve(fuzzy_curves.FuzzyCurve, poly_curves.PolyCurve):
     """Class representing fractal peano curve in [0,1]^d.
-    Params:
-        div         positive integer, number of divisions of each side of the cube (characteristic of a curve)
-        dim         dimension
-        proto       curve prototype - sequence of "cubes" with integer coordinates (x_0,..,x_{d-1}), 0<=x_j<div
-        base_maps   sequence of base maps (instances of BaseMap class)
-
     Immutable, hashable.
-    For examples see get_hilbert_curve()
     """
 
     # В коде приняты следующие обозначения:
     # cube -- куб из прототипа
     # cnum -- номер куба в прототипе
-
-    def __init__(self, dim, div, proto, base_maps):
-        self.dim = dim
-        self.div = div
-        self.proto = tuple(tuple(cube) for cube in proto)
-        self.base_maps = tuple(base_maps)
-        self.genus = self.div ** self.dim
-
-        # to make parent methods work
-        self.patterns = [Pattern(proto=proto, specs=[Spec(base_map=bm, pnum=0) for bm in base_maps])]
-        self.pattern_count = 1
 
     def _data(self):
         return self.dim, self.div, self.proto, self.base_maps
@@ -48,17 +31,13 @@ class Curve(fuzzy_curves.FuzzyCurve, poly_curves.PolyCurve):
     def __hash__(self):
         return hash(self._data())
 
-    def changed(self, proto=None, base_maps=None):
-        return type(self)(
-            dim=self.dim,
-            div=self.div,
-            proto=(proto if proto is not None else self.proto),
-            base_maps=(base_maps if base_maps is not None else self.base_maps),
-        )
-    
     #
     # Работа с базовыми преобразованиями и фракциями
     #
+
+    # кандидаты в self.base_maps[cnum]
+    def gen_allowed_maps(self, cnum):
+        yield self.base_maps[cnum]
 
     def get_subdivision(self, k=1):
         """Get k-th subdivision of a curve."""
@@ -95,10 +74,9 @@ class Curve(fuzzy_curves.FuzzyCurve, poly_curves.PolyCurve):
                     new_base_maps.append(base_map * bm)
 
             current_curve = type(self)(
-                dim = self.dim,
-                div = N*current_curve.div,
-                proto = new_proto,
-                base_maps = new_base_maps,
+                dim=self.dim,
+                div=N*current_curve.div,
+                patterns=[(new_proto, new_base_maps)],
             )
 
         return current_curve
@@ -312,11 +290,12 @@ class Curve(fuzzy_curves.FuzzyCurve, poly_curves.PolyCurve):
             for bm in gen_constraint_cube_maps(self.dim, {entr: exit, exit: entr}):
                 symmetries.append(bm.reverse_time())
 
-        return fuzzy_curves.FuzzyCurve(
+        return fuzzy_curves.SymmFuzzyCurve(
             dim=self.dim,
             div=self.div,
-            proto=self.proto,
-            base_maps=[None for j in range(self.genus)],  # забыли BaseMap-ы!
+            patterns=[
+                (self.proto, [None for j in range(self.genus)]),  # забыли BaseMap-ы!
+            ],
             repr_maps=self.base_maps,  # base_map-ы стали лишь представителями
             symmetries=symmetries,
         )

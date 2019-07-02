@@ -4,7 +4,7 @@ from .poly_curves import PolyCurve
 from .curves import Curve
 from .base_maps import BaseMap
 from .utils import chain2proto, basis2base_map
-from .common import Pattern, Spec
+from .common import Spec
 
 
 # Proceedings of the Steklov Institute of Mathematics, 2008, Vol. 263, pp. 236–256.
@@ -28,22 +28,20 @@ def get_scepin_bauman_curve():
         BaseMap(perm=[1,0],flip=[True,False]),  # rot(90)
         BaseMap(perm=[1,0],flip=[False,False]),  # (x,y)->(y,x)
     ]
-    return Curve(dim=2, div=3, proto=proto, base_maps=base_maps)
+    return Curve(dim=2, div=3, patterns=[(proto, base_maps)])
 
 
 # Minimal 2D monofractal curve in L_1 (9)
 def get_hilbert_curve():
     """Example of fractal curve due to D.Hilbert."""
-    return Curve(
-        dim=2, div=2,
-        proto=[(0, 0), (0, 1), (1, 1), (1, 0)],
-        base_maps=[
-            BaseMap([1, 0], [False, False]),  # (x,y)->(y,x)
-            BaseMap.id_map(2),                # (x,y)->(x,y)
-            BaseMap.id_map(2),                # (x,y)->(x,y)
-            BaseMap([1, 0], [True, True]),    # (x,y)->(1-y,1-x)
-        ],
-    )
+    proto = [(0, 0), (0, 1), (1, 1), (1, 0)]
+    base_maps = [
+        BaseMap([1, 0], [False, False]),  # (x,y)->(y,x)
+        BaseMap.id_map(2),                # (x,y)->(x,y)
+        BaseMap.id_map(2),                # (x,y)->(x,y)
+        BaseMap([1, 0], [True, True]),    # (x,y)->(1-y,1-x)
+    ]
+    return Curve(dim=2, div=2, patterns=[(proto, base_maps)])
 
 
 def get_peano_curve():
@@ -52,38 +50,34 @@ def get_peano_curve():
     x_map = BaseMap([0, 1], [True, False])  # (x,y)->(1-x,y)
     y_map = BaseMap([0, 1], [False, True])  # (x,y)->(x,1-y)
     xy_map = BaseMap([0, 1], [True, True])  # (x,y)->(1-x,1-y)
-    return Curve(
-        dim=2, div=3,
-        proto=[(0, 0), (0, 1), (0, 2), (1, 2), (1, 1), (1, 0), (2, 0), (2, 1), (2, 2)],
-        base_maps=[
-            id_map, x_map, id_map,
-            y_map, xy_map, y_map,
-            id_map, x_map, id_map,
-        ],
-    )
+    proto=[(0, 0), (0, 1), (0, 2), (1, 2), (1, 1), (1, 0), (2, 0), (2, 1), (2, 2)]
+    base_maps=[
+        id_map, x_map, id_map,
+        y_map, xy_map, y_map,
+        id_map, x_map, id_map,
+    ]
+    return Curve(dim=2, div=3, patterns=[(proto, base_maps)])
 
 def get_peano5_curve():
     id_map = BaseMap.id_map(2)
     x_map = BaseMap([0, 1], [True, False])  # (x,y)->(1-x,y)
     y_map = BaseMap([0, 1], [False, True])  # (x,y)->(x,1-y)
     xy_map = BaseMap([0, 1], [True, True])  # (x,y)->(1-x,1-y)
-    return Curve(
-        dim=2, div=5,
-        proto=[
-            (0, 0), (0, 1), (0, 2), (0, 3), (0, 4),
-            (1, 4), (1, 3), (1, 2), (1, 1), (1, 0),
-            (2, 0), (2, 1), (2, 2), (2, 3), (2, 4),
-            (3, 4), (3, 3), (3, 2), (3, 1), (3, 0),
-            (4, 0), (4, 1), (4, 2), (4, 3), (4, 4),
-        ],
-        base_maps=[
-            id_map, x_map, id_map, x_map, id_map,
-            y_map, xy_map, y_map, xy_map, y_map,
-            id_map, x_map, id_map, x_map, id_map,
-            y_map, xy_map, y_map, xy_map, y_map,
-            id_map, x_map, id_map, x_map, id_map,
-        ],
-    )
+    proto = [
+        (0, 0), (0, 1), (0, 2), (0, 3), (0, 4),
+        (1, 4), (1, 3), (1, 2), (1, 1), (1, 0),
+        (2, 0), (2, 1), (2, 2), (2, 3), (2, 4),
+        (3, 4), (3, 3), (3, 2), (3, 1), (3, 0),
+        (4, 0), (4, 1), (4, 2), (4, 3), (4, 4),
+    ]
+    base_maps = [
+        id_map, x_map, id_map, x_map, id_map,
+        y_map, xy_map, y_map, xy_map, y_map,
+        id_map, x_map, id_map, x_map, id_map,
+        y_map, xy_map, y_map, xy_map, y_map,
+        id_map, x_map, id_map, x_map, id_map,
+    ]
+    return Curve(dim=2, div=5, patterns=[(proto, base_maps)])
 
 
 # Minimal 2D monofractal curve in L_inf (5.333) and L_2 (5.667)
@@ -93,8 +87,9 @@ def get_meurthe_curve():
     bases = ['ji','Ji','ij','jI','JI','iJ','ji','Ji','ij']
     return Curve(
         dim=2, div=3,
-        proto=chain2proto(chain_code),
-        base_maps=[basis2base_map(b) for b in bases],
+        patterns=[
+            (chain2proto(chain_code), [basis2base_map(b) for b in bases]),
+        ],
     )
     
     
@@ -103,8 +98,9 @@ def get_coil_curve():
     bases = ['ji','Ji','ji','jI','JI','jI','ji','Ji','ji']
     return Curve(
         dim=2, div=3,
-        proto=chain2proto(chain_code),
-        base_maps=[basis2base_map(b) for b in bases],
+        patterns=[
+            (chain2proto(chain_code), [basis2base_map(b) for b in bases]),
+        ],
     )
 
 
@@ -113,8 +109,9 @@ def get_serpentine_curve():
     bases = ['ij','Ji','ji','iJ','JI','iJ','ji','Ji','ij']
     return Curve(
         dim=2, div=3,
-        proto=chain2proto(chain_code),
-        base_maps=[basis2base_map(b) for b in bases],
+        patterns=[
+            (chain2proto(chain_code), [basis2base_map(b) for b in bases]),
+        ],
     )
 
 
@@ -123,8 +120,9 @@ def get_R_curve():
     bases = ['ji','ji','ij','ij','ij','IJ','JI','JI','ij']
     return Curve(
         dim=2, div=3,
-        proto=chain2proto(chain_code),
-        base_maps=[basis2base_map(b) for b in bases],
+        patterns=[
+            (chain2proto(chain_code), [basis2base_map(b) for b in bases]),
+        ],
     )
 
 
@@ -135,8 +133,9 @@ def get_haverkort_curve_1():
     bases = ['kji0','jik0','kIj1','iKJ0','IKJ1','KIj0','Kij1','Jki1']
     return Curve(
         dim=3, div=2,
-        proto=chain2proto(chain_code),
-        base_maps=[basis2base_map(b) for b in bases],
+        patterns=[
+            (chain2proto(chain_code), [basis2base_map(b) for b in bases]),
+        ],
     )
 
 # Minimal 3D monofractal curve with time reversal in L_inf (12.4)
@@ -156,12 +155,7 @@ def get_haverkort_curve_A26():
         BaseMap([2, 0, 1], [True, False, False], time_rev=True),
         BaseMap([1, 2, 0], [True, False, False], time_rev=True),
     ]
-    return Curve(
-        dim=3, div=2,
-        proto=proto,
-        base_maps=base_maps,
-    )
-
+    return Curve(dim=3, div=2, patterns=[(proto, base_maps)])
 
 
 # Minimal 3D monofractal curve with time reversal in L_1 (89.8) and L_2 (18.6)
@@ -174,8 +168,9 @@ def get_haverkort_curve_2():
     bases = ['KIJ1','KJI1','KjI0','Jki1','jki0','kjI1','kJI0','iKJ0']
     return Curve(
         dim=3, div=2,
-        proto=chain2proto(chain_code),
-        base_maps=[basis2base_map(b) for b in bases],
+        patterns=[
+            (chain2proto(chain_code), [basis2base_map(b) for b in bases]),
+        ],
     )
 
 
@@ -185,8 +180,9 @@ def get_tokarev_curve():
     bases = ['jki', 'kij', 'kij', 'iJK', 'iJK', 'KIj', 'KIj', 'JkI']
     return Curve(
         dim=3, div=2,
-        proto=chain2proto(chain_code),
-        base_maps=[basis2base_map(b) for b in bases],
+        patterns=[
+            (chain2proto(chain_code), [basis2base_map(b) for b in bases]),
+        ],
     )
 
 
@@ -196,50 +192,53 @@ def get_rev_curve():
     """Curve with time reversal at some middle cube."""
     return Curve(
         dim=2, div=2,
-        proto=[(0, 0), (0, 1), (1, 1), (1, 0)],
-        base_maps=[
-            BaseMap([1, 0], [False, False]),                # (x,y)->(y,x)
-            BaseMap([0, 1], [True, False], time_rev=True),  # (x,y)->(1-x,y), t->1-t
-            BaseMap.id_map(2),                              # (x,y)->(x,y)
-            BaseMap([1, 0], [True, True]),                  # (x,y)->(1-y,1-x)
+        patterns=[
+            (
+                [(0, 0), (0, 1), (1, 1), (1, 0)],
+                [
+                    BaseMap([1, 0], [False, False]),                # (x,y)->(y,x)
+                    BaseMap([0, 1], [True, False], time_rev=True),  # (x,y)->(1-x,y), t->1-t
+                    BaseMap.id_map(2),                              # (x,y)->(x,y)
+                    BaseMap([1, 0], [True, True]),                  # (x,y)->(1-y,1-x)
+                ],
+            ),
         ],
     )
 
 def get_rev2_curve():
     """Curve with time reversal at first cube."""
+    proto = [(0, 0), (0, 1), (1, 1), (1, 0)]
+    base_maps=[
+        BaseMap([1, 0], [False, True], time_rev=True),  # (x,y)->(y,1-x), t->1-t
+        BaseMap.id_map(2),                              # (x,y)->(x,y)
+        BaseMap.id_map(2),                              # (x,y)->(x,y)
+        BaseMap([1, 0], [True, True]),                  # (x,y)->(1-y,1-x)
+    ]
     return Curve(
         dim=2, div=2,
-        proto=[(0, 0), (0, 1), (1, 1), (1, 0)],
-        base_maps=[
-            BaseMap([1, 0], [False, True], time_rev=True),  # (x,y)->(y,1-x), t->1-t
-            BaseMap.id_map(2),                              # (x,y)->(x,y)
-            BaseMap.id_map(2),                              # (x,y)->(x,y)
-            BaseMap([1, 0], [True, True]),                  # (x,y)->(1-y,1-x)
-        ],
+        patterns=[(proto, base_maps)],
     )
 
 def get_rev3_curve():
     """Curve with time reversal at last cube."""
-    return Curve(
-        dim=2, div=2,
-        proto=[(0, 0), (0, 1), (1, 1), (1, 0)],
-        base_maps=[
-            BaseMap([1, 0], [False, False]),                # (x,y)->(y,x)
-            BaseMap.id_map(2),                              # (x,y)->(x,y)
-            BaseMap.id_map(2),                              # (x,y)->(x,y)
-            BaseMap([1, 0], [True, False], time_rev=True),  # (x,y)->(1-y,x), t->1-t
-        ],
-    )
-
-# TODO: rev4
+    proto=[(0, 0), (0, 1), (1, 1), (1, 0)]
+    base_maps=[
+        BaseMap([1, 0], [False, False]),                # (x,y)->(y,x)
+        BaseMap.id_map(2),                              # (x,y)->(x,y)
+        BaseMap.id_map(2),                              # (x,y)->(x,y)
+        BaseMap([1, 0], [True, False], time_rev=True),  # (x,y)->(1-y,x), t->1-t
+    ]
+    return Curve(dim=2, div=2, patterns=[(proto, base_maps)])
 
 
 # Discontinuous curve - beginning in square center
 def get_discontinuous_curve():
+    proto = [(1, 1), (0, 1), (0, 0), (1, 0), (2, 0), (2, 1), (2, 2), (1, 2), (0, 2)]
     return Curve(
         dim=2, div=2,
-        proto=[(1, 1), (0, 1), (0, 0), (1, 0), (2, 0), (2, 1), (2, 2), (1, 2), (0, 2)],
-        base_maps=[BaseMap.id_map(2)] * 9,
+        patterns=[
+            (proto, [BaseMap.id_map(2)] * 9),
+        ],
     )
 
 # Discontinuous curve
@@ -248,8 +247,7 @@ def get_morton_curve():
     bases = ['ij'] * 4
     return Curve(
         dim=2, div=2,
-        proto=chain2proto(chain_code),
-        base_maps=[basis2base_map(b) for b in bases],
+        patterns=[(chain2proto(chain_code), [basis2base_map(b) for b in bases])],
     )
 
 #
@@ -258,8 +256,8 @@ def get_morton_curve():
 
 def get_hilbert_bicurve():
     curve = get_hilbert_curve()
-    p1 = Pattern(proto=curve.proto, specs=[Spec(bm, pnum=cnt % 2) for cnt, bm in enumerate(curve.base_maps)])
-    p2 = Pattern(proto=curve.proto, specs=[Spec(bm, pnum=(cnt + 1) % 2) for cnt, bm in enumerate(curve.base_maps)])
+    p1 = (curve.proto, [Spec(bm, pnum=cnt % 2) for cnt, bm in enumerate(curve.base_maps)])
+    p2 = (curve.proto, [Spec(bm, pnum=(cnt + 1) % 2) for cnt, bm in enumerate(curve.base_maps)])
     return PolyCurve(dim=2, div=2, patterns=[p1,p2])
 
 """
@@ -293,8 +291,7 @@ def get_beta_Omega_Curve():
             spec = Spec(base_map=basis2base_map(basis), pnum=int(pnum_str))
             specs.append(spec)
         proto = chain2proto(chain_code)
-        pattern = Pattern(proto=proto, specs=specs)
-        patterns.append(pattern)
+        patterns.append((proto, specs))
 
     return PolyCurve(dim=2, div=2, patterns=patterns)
 

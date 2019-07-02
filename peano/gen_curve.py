@@ -304,7 +304,7 @@ class CurveGenerator:
             proto.append(cube)
 
         for bms in itertools.product(*bms_variants):
-            curve = Curve(dim=self.dim, div=self.div, proto=proto, base_maps=bms)
+            curve = Curve(dim=self.dim, div=self.div, patterns=[(proto, bms)])
             yield curve
             
 

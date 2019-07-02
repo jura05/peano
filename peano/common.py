@@ -3,11 +3,6 @@ from collections import namedtuple
 from .base_maps import BaseMap, Spec
 
 
-Pattern = namedtuple('Pattern', ['proto', 'specs'])
-
-
-# TODO: автостыки - там только pnum ...
-
 # стык двух фракций кривой
 # всегда приводим к стандартному виду:
 # - pnum1 <= pnum2

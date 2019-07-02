@@ -1,41 +1,68 @@
 from collections import namedtuple
 
-from .common import Pattern, Junction
+from .common import Junction
 from .base_maps import BaseMap, Spec
 
 
+# patterns - список пар (proto, specs)
 # pnum - выделенный шаблон, задаёт реальную кривую [0,1]->[0,1]^d
 class FuzzyPolyCurve:
+    Pattern = namedtuple('Pattern', ['proto', 'specs'])
+
     def __init__(self, dim, div, patterns, pnum=0):
         self.dim = dim
         self.div = div
-        self.patterns = tuple(patterns)
-        self.pattern_count = len(patterns)
+
+        self.patterns = []
+        for proto, specs in patterns:
+            proto = (tuple(cube) for cube in proto)
+            specs = (sp if isinstance(sp, Spec) else Spec(sp) if sp is not None else None for sp in specs)
+            pattern = FuzzyPolyCurve.Pattern(proto=tuple(proto), specs=tuple(specs))
+            self.patterns.append(pattern)
+
+        self.pattern_count = len(self.patterns)
         self.pnum = pnum
+
+        # legacy
+        self.proto = self.patterns[pnum].proto
+        self.specs = self.patterns[pnum].specs
+        self.base_maps = [sp.base_map if sp is not None else None for sp in self.specs]
+
         self.genus = div**dim
+
+    # создать кривую с другими данным
+    def changed(self, patterns=None, pnum=None, **kwargs):
+        return type(self)(
+            dim=self.dim,
+            div=self.div,
+            patterns=patterns if patterns is not None else self.patterns,
+            pnum=pnum if pnum is not None else self.pnum,
+            **kwargs,
+        )
 
     def reverse(self):
         """Reverse time in a curve."""
         new_patterns = []
         for pattern in self.patterns:
-            new_pattern = Pattern(
-                proto=tuple(reversed(pattern.proto)),
-                specs=tuple(reversed(pattern.specs)),
+            new_pattern = (
+                # прототип проходится в обратном порядке
+                reversed(pattern.proto),
+
+                # базовые преобразования проходятся в обратном порядке
+                # сами по себе они не меняются:
+                #   - если обращения времени не было, то его и не будет
+                #   - изометрия куба не меняется, т.к. время не играет роли
+                reversed(pattern.specs),
             )
             new_patterns.append(new_pattern)
 
-        return type(self)(
-            dim=self.dim,
-            div=self.div,
-            patterns=new_patterns,
-        )
+        return self.changed(patterns=new_patterns)
 
     def __rmul__(self, other):
-        """Apply base map to a fractal curve, return new curve."""
+        """Apply base map/spec to a fractal curve, return new curve."""
         if isinstance(other, Spec):
             new_curve = other.base_map * self
-            new_curve.pnum = self.pnum
-            return new_curve
+            return new_curve.changed(pnum=other.pnum)
         elif not isinstance(other, BaseMap):
             return NotImplemented
 
@@ -56,22 +83,22 @@ class FuzzyPolyCurve:
             # прототип подвергается изометрии
             new_proto = [base_map.apply_cube(self.div, cube) for cube in pattern.proto]
 
-            # базовые преобразования сопрягаются: действительно, чтобы получить
+            # спеки преобразования сопрягаются: действительно, чтобы получить
             # из преобразованной кривой её фракцию, можно сделать так:
             # - сначала вернуться к исходной кривой (inv)
             # - применить преобразование исходной кривой для перехода к фракции (bm)
             # - перейти к преобразованной кривой (base_map)
             inv = base_map.inverse()
+            conj_cache = {}
+            def conjugate(sp):
+                if sp not in conj_cache:
+                    conj_cache[sp] = base_map * sp * inv
+                return conj_cache[sp]
 
-            new_specs = [base_map * spec * inv if spec is not None else None for spec in pattern.specs]
-            new_pattern = Pattern(new_proto, new_specs)
-            new_patterns.append(new_pattern)
+            new_specs = [conjugate(spec) if spec is not None else None for spec in pattern.specs]
+            new_patterns.append((new_proto, new_specs))
 
-        return type(self)(
-            dim=self.dim,
-            div=self.div,
-            patterns=new_patterns,
-        )
+        return self.changed(patterns=new_patterns)
 
     #
     # Стыки - общие методы

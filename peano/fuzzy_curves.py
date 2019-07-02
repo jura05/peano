@@ -1,80 +1,26 @@
 import time
 from fractions import Fraction
 import itertools
+from collections import namedtuple
 
 from .fast_fractions import FastFraction
 from . import sat_adapters
 from . import pieces
 from . import curves
 from . import fuzzy_poly_curves
-from .common import Junction, Pattern
+from .common import Junction
 from .base_maps import Spec, BaseMap
 
 
 class FuzzyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
-    # base_maps - list as in Curve, may contain None
-    # repr_maps - список представителей (coset representatives) base_map-ов, которые сохраняют вход-выход
-    # symmetries - симметрии кривой
-    def __init__(self, dim, div, proto, base_maps, repr_maps, symmetries):
-        self.dim = dim
-        self.div = div
-        self.proto = tuple(proto)
-        self.base_maps = tuple(base_maps)
-        self.repr_maps = tuple(repr_maps)
-        self.symmetries = tuple(symmetries)
-        self.genus = self.div ** self.dim
-
-        # to make parent methods work
-        self.patterns = [Pattern(proto=proto, specs=[Spec(base_map=bm, pnum=0) for bm in base_maps])]
-        self.pattern_count = 1
-
-    # создать кривую с другим прототипом/base_maps/whatever
-    def changed(self, proto=None, base_maps=None, repr_maps=None, symmetries=None):
-        return type(self)(
-            dim=self.dim,
-            div=self.div,
-            proto=proto if proto is not None else self.proto,
-            base_maps=base_maps if base_maps is not None else self.base_maps,
-            repr_maps=repr_maps if repr_maps is not None else self.repr_maps,
-            symmetries=symmetries if symmetries is not None else self.symmetries,
-        )
 
     def get_fraction(self, cnum):
         """Get fraction as a curve."""
         return self.base_maps[cnum] * self
 
-    def reverse(self):
-        """Reverse time in a curve."""
-
-        kwargs = {}
-        if hasattr(self, 'repr_maps'):
-            kwargs['repr_maps'] = reversed(self.repr_maps)
-
-        # симметрии не меняются!
-
-        return self.changed(
-            # прототип проходится в обратном порядке
-            proto = reversed(self.proto),
-
-            # базовые преобразования проходятся в обратном порядке
-            # сами по себе они не меняются:
-            #   - если обращения времени не было, то его и не будет
-            #   - изометрия куба не меняется, т.к. время не играет роли
-            base_maps = reversed(self.base_maps),
-
-            **kwargs,
-        )
-
     # кандидаты в self.base_maps[cnum]
     def gen_allowed_maps(self, cnum):
-        if self.base_maps[cnum] is not None:
-            # базовое преобразование уже определено!
-            yield self.base_maps[cnum]
-            return
-
-        repr_map = self.repr_maps[cnum]
-        for symm in self.symmetries:
-            yield repr_map * symm
+        raise NotImplementedError("Define in child class")
 
     def gen_possible_curves(self):
         bm_variants = [self.gen_allowed_maps(cnum) for cnum in range(self.genus)]
@@ -82,8 +28,7 @@ class FuzzyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
             yield curves.Curve(
                 dim=self.dim,
                 div=self.div,
-                proto=self.proto,
-                base_maps=base_maps,
+                patterns=[(self.proto, base_maps)],
             )
 
     def get_piece_position(self, cnum):
@@ -100,46 +45,7 @@ class FuzzyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
 
         new_base_maps = list(self.base_maps)
         new_base_maps[cnum] = base_map
-        return self.changed(base_maps=new_base_maps)
-
-    def __rmul__(self, base_map):
-        """Apply base map to a fractal curve, return new curve."""
-        if not isinstance(base_map, BaseMap):
-            return NotImplemented
-
-        if base_map.dim != self.dim:
-            raise Exception("Incompatible base map!")
-
-        # можно разложить базовое преобразование в произведение (коммутирующих) 
-        # преобразований: обращение времени с тождественной изометрией  +  изометрии куба
-        if base_map.time_rev:
-            return base_map.cube_map() * self.reverse()
-
-        # применяем изометрию куба
-
-        # прототип подвергается изометрии
-        proto = [base_map.apply_cube(self.div, cube) for cube in self.proto]
-
-        # базовые преобразования сопрягаются: действительно, чтобы получить
-        # из преобразованной кривой её фракцию, можно сделать так:
-        # - сначала вернуться к исходной кривой (inv)
-        # - применить преобразование исходной кривой для перехода к фракции (bm)
-        # - перейти к преобразованной кривой (base_map)
-        inv = base_map.inverse()
-        conj_cache = {}
-        def conjugate(bm):
-            if bm not in conj_cache:
-                conj_cache[bm] = base_map * bm * inv
-            return conj_cache[bm]
-
-        new_maps = [conjugate(bm) if bm is not None else None for bm in self.base_maps]
-        kwargs = {}
-        if hasattr(self, 'symmetries'):
-            kwargs['symmetries'] = [conjugate(bm) for bm in self.symmetries]
-        if hasattr(self, 'repr_maps'):
-            kwargs['repr_maps'] = [conjugate(bm) for bm in self.repr_maps]
-
-        return self.changed(proto=proto, base_maps=new_maps, **kwargs)
+        return self.changed(patterns=[(self.proto, new_base_maps)])
 
     def bm_info(self):
         return {cnum: bm for cnum, bm in enumerate(self.base_maps) if bm is not None}
@@ -314,3 +220,55 @@ class FuzzyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
                 junc_curves.setdefault(junc, []).append(curve)
 
         return junc_curves
+
+
+# repr_maps - список представителей (coset representatives) base_map-ов, которые сохраняют вход-выход
+# symmetries - симметрии кривой
+class SymmFuzzyCurve(FuzzyCurve):
+    def __init__(self, *args, **kwargs):
+        repr_maps = kwargs.pop('repr_maps')
+        symmetries = kwargs.pop('symmetries')
+        super().__init__(*args, **kwargs)
+        self.repr_maps = tuple(repr_maps)
+        self.symmetries = tuple(symmetries)
+
+    def changed(self, *args, **kwargs):
+        if 'repr_maps' not in kwargs:
+            kwargs['repr_maps'] = self.repr_maps
+        if 'symmetries' not in kwargs:
+            kwargs['symmetries'] = self.symmetries
+        return super().changed(*args, **kwargs)
+
+    def reverse(self):
+        return super().reverse().changed(repr_maps=reversed(self.repr_maps))
+
+    def __rmul__(self, base_map):
+        """Apply base map to a fractal curve, return new curve."""
+        if not isinstance(base_map, BaseMap):
+            return NotImplemented
+        if base_map.time_rev:
+            return base_map.cube_map() * self.reverse()
+
+        curve = super().__rmul__(base_map)
+        inv = base_map.inverse()
+        conj_cache = {}
+        def conjugate(bm):
+            if bm not in conj_cache:
+                conj_cache[bm] = base_map * bm * inv
+            return conj_cache[bm]
+
+        return curve.changed(
+            symmetries=[conjugate(bm) for bm in self.symmetries],
+            repr_maps=[conjugate(bm) for bm in self.repr_maps],
+        )
+
+    # кандидаты в self.base_maps[cnum]
+    def gen_allowed_maps(self, cnum):
+        if self.base_maps[cnum] is not None:
+            # базовое преобразование уже определено!
+            yield self.base_maps[cnum]
+            return
+
+        repr_map = self.repr_maps[cnum]
+        for symm in self.symmetries:
+            yield repr_map * symm
