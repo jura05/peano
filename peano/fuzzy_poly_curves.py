@@ -2,6 +2,7 @@ from collections import namedtuple
 
 from .common import Junction
 from .base_maps import BaseMap, Spec
+from . import pieces
 
 
 # patterns - список пар (proto, specs)
@@ -103,13 +104,22 @@ class FuzzyPolyCurve:
     def gen_allowed_specs(self, pnum, cnum):
         raise NotImplementedError("Define in child class")
 
+    def get_piece_position(self, pnum, cnum):
+        return pieces.CurvePiecePosition(
+            dim=self.dim,
+            div=self.div,
+            cnums=[cnum],
+            cubes=[self.patterns[pnum].proto[cnum]],
+        )
+
     def specify(self, pnum, cnum, spec):
         if spec not in self.gen_allowed_specs(pnum, cnum):
             raise Exception("Can't specify curve")
 
-        new_specs = list(self.patterns[cnum].specs)
+        pattern = self.patterns[pnum]
+        new_specs = list(pattern.specs)
         new_specs[cnum] = spec
-        new_pattern = (self.patterns[cnum].proto, new_specs)
+        new_pattern = (pattern.proto, new_specs)
 
         new_patterns = list(self.patterns)
         new_patterns[pnum] = new_pattern

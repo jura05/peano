@@ -4,7 +4,7 @@ from heapq import heappop, heappush
 from fractions import Fraction
 
 from .fast_fractions import FastFraction
-from .base_maps import BaseMap, gen_constraint_cube_maps
+from .base_maps import BaseMap, Spec, gen_constraint_cube_maps
 
 
 @lru_cache(maxsize=2**20)
@@ -67,9 +67,10 @@ class CurvePiecePosition:
         )
 
 class CurvePiece:
-    # фракция кривой = кривая + позиция фракции
-    def __init__(self, curve, pos):
+    # фракция кривой = кривая(шаблоны) + pnum (TODO?) + позиция фракции
+    def __init__(self, curve, pnum, pos):
         self.curve = curve
+        self.pnum = pnum
         self.pos = pos
 
     # only for full fractal curves
@@ -89,27 +90,27 @@ class CurvePiece:
 
         # определим ориентацию предпоследнего кусочка
         # в последнем кубе ориентация не задана!
-        prev_map = BaseMap.id_map(dim)
+        prev_spec = Spec(BaseMap.id_map(dim), self.pnum)
+        prev_curve = prev_spec * self.curve
         for cnum in self.pos.cnums[:-1]:
-            cnum = prev_map.apply_cnum(G, cnum)
-            prev_map = prev_map * curve.base_maps[cnum]  # именно в таком порядке!
+            prev_spec = prev_curve.specs[cnum] * prev_spec  # TODO: кривую умножать дорого, оптимизировать!
+            prev_curve = prev_spec * self.curve
 
-        prev_curve = prev_map * curve
+        active_pnum = prev_curve.pnum
         active_cnum = self.pos.cnums[-1]  # кубик, где всё происходит
-        spec_cnum = prev_map.apply_cnum(G, active_cnum)
+        spec_cnum = prev_spec.base_map.apply_cnum(G, active_cnum)
 
         # делим
-        for bm in prev_curve.gen_allowed_maps(active_cnum):
-
+        for sp in prev_curve.gen_allowed_specs(active_pnum, active_cnum):
             # сопряжение, как в apply:
             # для prev_curve.base_maps[active_cnum] = bm =>  orig_curve.base_maps[spec_cnum] = ...
-            new_map = prev_map.inverse() * bm * prev_map
-            specified_curve = curve.specify(spec_cnum, new_map)
+            new_spec = prev_spec.base_map.inverse() * sp * prev_spec.base_map
+            specified_curve = curve.specify(active_pnum, spec_cnum, new_spec)
 
-            last_curve = bm * prev_curve
+            last_curve = sp * prev_curve
             for cnum, cube in enumerate(last_curve.proto):
                 new_pos = self.pos.specify(cnum, cube)
-                new_piece = CurvePiece(specified_curve, new_pos)
+                new_piece = CurvePiece(specified_curve, self.pnum, new_pos)
                 yield new_piece
 
 
@@ -121,8 +122,8 @@ class CurvePieceBalancedPair:
         self.junc = junc
         self.pos1 = pos1
         self.pos2 = pos2
-        self.piece1 = CurvePiece(self.curve, self.pos1)
-        self.piece2 = CurvePiece(self.curve, self.pos2)
+        self.piece1 = CurvePiece(self.curve, junc.spec1.pnum, self.pos1)
+        self.piece2 = CurvePiece(self.curve, junc.spec2.pnum, self.pos2)
 
     def divide(self):
         # при делении кусочка у него уточняется кривая, поэтому берём кривую из него

@@ -1,7 +1,9 @@
 from fractions import Fraction
 
+from .fast_fractions import FastFraction
 from . import fuzzy_poly_curves
 from .base_maps import BaseMap, Spec
+from . import pieces
 
 
 class PolyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
@@ -95,3 +97,79 @@ class PolyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
     # кандидаты в self.base_maps[cnum]
     def gen_allowed_specs(self, pnum, cnum):
         yield self.patterns[pnum].specs[cnum]
+
+    def init_pairs_tree(self):
+        G = self.genus
+        for junc in self.gen_auto_junctions():
+            for cnum1 in range(G):
+                for cnum2 in range(cnum1 + 2, G):
+                    pos1 = self.get_piece_position(junc.spec1.pnum, cnum1)
+                    pos2 = self.get_piece_position(junc.spec2.pnum, cnum2)
+                    yield pieces.CurvePieceBalancedPair(self, junc, pos1, pos2)
+
+        for junc in self.gen_junctions():
+            last_cnum1 = 0 if junc.spec1.base_map.time_rev else G - 1
+            first_cnum2 = G - 1 if junc.spec2.base_map.time_rev else 0
+            for cnum1 in range(G):
+                for cnum2 in range(G):
+                    if (cnum1, cnum2) == (last_cnum1, first_cnum2):
+                        continue
+                    pos1 = self.get_piece_position(junc.spec1.pnum, cnum1)
+                    pos2 = self.get_piece_position(junc.spec2.pnum, cnum2)
+                    yield pieces.CurvePieceBalancedPair(self, junc, pos1, pos2)
+
+    def estimate_ratio(self, ratio_func, rel_tol_inv=100, upper_bound=None, max_iter=None, use_vertex_brkline=False, verbose=False):
+        curr_up = None
+        curr_lo = FastFraction(0, 1)
+
+        pairs_tree_par = {}
+        if use_vertex_brkline:
+            vertex_brkline = [(x, t) for x, t in self.get_vertex_moments().items()]
+            pairs_tree_par['brkline'] = IntegerBrokenLine(self.dim, vertex_brkline)
+        pairs_tree = pieces.PairsTree(ratio_func, **pairs_tree_par)
+
+        for pair in self.init_pairs_tree():
+            pairs_tree.add_pair(pair)
+
+        argmax = None
+        for node in pairs_tree.data:
+            if node.lo > curr_lo:
+                curr_lo = node.lo
+                argmax = node.argmax
+
+        curr_up = pairs_tree.data[0].up
+        pairs_tree.set_good_threshold(curr_lo)
+        if verbose:
+            print('start bounds: ', curr_lo, curr_up)
+
+        tolerance = FastFraction(rel_tol_inv + 1, rel_tol_inv)
+        iter_no = 0
+        while curr_up > curr_lo * tolerance:
+            iter_no += 1
+            if not pairs_tree.data:
+                break
+            if max_iter is not None and iter_no > max_iter:
+                # оставляем оценки, полученные на текущий момент
+                break
+            
+            pairs_tree.divide()
+
+            for node in pairs_tree.data:
+                if node.lo > curr_lo:
+                    curr_lo = node.lo
+                    argmax = node.argmax
+                    if verbose:
+                        print('new lower bound: ', curr_lo, curr_up)
+            pairs_tree.set_good_threshold(curr_lo)
+
+            new_up = pairs_tree.data[0].up
+            if new_up < curr_up:
+                if verbose:
+                    print('new upper bound: ', curr_lo, new_up)
+                curr_up = new_up
+
+        res = {'up': curr_up, 'lo': curr_lo}
+        if argmax is not None:
+            res['argmax'] = argmax
+
+        return res

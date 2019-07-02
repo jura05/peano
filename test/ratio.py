@@ -82,6 +82,38 @@ class TestCurve(unittest.TestCase):
                 assert float(res['up']) <= ratio_up, 'metric {} up failed: {} > {}'.format(metric, res['up'], ratio_up)
                 assert float(res['lo']) >= ratio_lo, 'metric {} lo failed: {} < {}'.format(metric, res['lo'], ratio_lo)
 
+    def test_polycurve_ratio(self):
+        known_bounds = [
+            {
+                'curve': get_beta_Omega_Curve(),
+                'ratio': { 'l2': 5, 'l1': 9, 'linf': 5},
+            },
+            {
+                'curve': get_neptunus_curve(),
+                'ratio': { 'l2': [18.2, 18.4], 'linf': [9.44, 9.46]},
+            },
+        ]
+        for data in known_bounds:
+            curve = data['curve']
+            for metric, ratio in data['ratio'].items():
+                if isinstance(ratio, list):
+                    ratio_lo, ratio_up = ratio
+                else:
+                    ratio_lo = ratio * 0.999
+                    ratio_up = ratio * 1.001
+
+                if metric == 'l2':
+                    func = utils.ratio_l2_squared
+                    ratio_lo, ratio_up = ratio_lo**2, ratio_up**2
+                elif metric == 'l1':
+                    func = utils.ratio_l1
+                elif metric == 'linf':
+                    func = utils.ratio_linf
+
+                res = curve.estimate_ratio(func, rel_tol_inv=10**4)
+                assert float(res['up']) <= ratio_up, 'metric {} up failed: {} > {}'.format(metric, res['up'], ratio_up)
+                assert float(res['lo']) >= ratio_lo, 'metric {} lo failed: {} < {}'.format(metric, res['lo'], ratio_lo)
+
     def test_pcurve_ratio(self):
         pcurve = get_peano5_curve().forget(allow_time_rev=True)
         assert pcurve.test_ratio(utils.ratio_l2_squared, lower_bound=FastFraction(90, 1), upper_bound=FastFraction(100, 1))

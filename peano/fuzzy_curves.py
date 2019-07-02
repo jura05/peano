@@ -31,22 +31,6 @@ class FuzzyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
                 patterns=[(self.proto, base_maps)],
             )
 
-    def get_piece_position(self, cnum):
-        return pieces.CurvePiecePosition(
-            dim=self.dim,
-            div=self.div,
-            cnums=[cnum],
-            cubes=[self.proto[cnum]],
-        )
-
-    def specify(self, cnum, base_map):
-        if base_map not in self.gen_allowed_maps(cnum):
-            raise Exception("Can't specify curve")
-
-        new_base_maps = list(self.base_maps)
-        new_base_maps[cnum] = base_map
-        return self.changed(patterns=[(self.proto, new_base_maps)])
-
     def bm_info(self):
         return {cnum: bm for cnum, bm in enumerate(self.base_maps) if bm is not None}
 
@@ -204,10 +188,10 @@ class FuzzyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
                         for bm_ii in self.gen_allowed_maps(cnum + 1):
                             if cnum + 1 == G - 1 and bm_ii != bm_last:
                                 continue
-                            curve = self.specify(0, bm_first)\
-                                .specify(G - 1, bm_last)\
-                                .specify(cnum, bm_i)\
-                                .specify(cnum + 1, bm_ii)
+                            curve = self.specify(pnum=0, cnum=0, spec=Spec(bm_first))\
+                                .specify(pnum=0, cnum=G - 1, spec=Spec(bm_last))\
+                                .specify(pnum=0, cnum=cnum, spec=Spec(bm_i))\
+                                .specify(pnum=0, cnum=cnum + 1, spec=Spec(bm_ii))
 
                             configs.append((cnum, curve))
 
@@ -242,10 +226,15 @@ class SymmFuzzyCurve(FuzzyCurve):
     def reverse(self):
         return super().reverse().changed(repr_maps=reversed(self.repr_maps))
 
-    def __rmul__(self, base_map):
-        """Apply base map to a fractal curve, return new curve."""
-        if not isinstance(base_map, BaseMap):
+    def __rmul__(self, other):
+        # TODO: remove copypaste
+        if isinstance(other, Spec):
+            new_curve = other.base_map * self
+            return new_curve.changed(pnum=other.pnum)
+        elif not isinstance(other, BaseMap):
             return NotImplemented
+        base_map = other
+
         if base_map.time_rev:
             return base_map.cube_map() * self.reverse()
 
@@ -272,3 +261,14 @@ class SymmFuzzyCurve(FuzzyCurve):
         repr_map = self.repr_maps[cnum]
         for symm in self.symmetries:
             yield repr_map * symm
+
+    def gen_allowed_specs(self, pnum, cnum):
+        assert pnum == 0
+        if self.specs[cnum] is not None:
+            # базовое преобразование уже определено!
+            yield self.specs[cnum]
+            return
+
+        repr_map = self.repr_maps[cnum]
+        for symm in self.symmetries:
+            yield Spec(repr_map * symm)
