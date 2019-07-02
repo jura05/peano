@@ -1,26 +1,9 @@
 from collections import namedtuple
 
-from .base_maps import BaseMap
+from .base_maps import BaseMap, Spec
 
 
 Pattern = namedtuple('Pattern', ['proto', 'specs'])
-
-class Spec:
-    def __init__(self, base_map, pnum=0):
-        self.base_map = base_map
-        self.pnum = pnum
-
-    def _data(self):
-        return (self.base_map, self.pnum)
-
-    def __eq__(self, other):
-        return self._data() == other._data()
-
-    def __hash__(self):
-        return hash(self._data())
-
-    def __repr__(self):
-        return '{} * [{}]'.format(self.base_map, self.pnum)
 
 
 # TODO: автостыки - там только pnum ...
@@ -49,18 +32,15 @@ class Junction:
             delta_x = tuple(-dj for dj in delta_x)
             spec1, spec2 = spec2, spec1
 
-        bm1 = spec1.base_map
-        bm2 = spec2.base_map
-
-        if spec1.pnum == spec2.pnum and bm1.time_rev and bm2.time_rev:
+        if spec1.pnum == spec2.pnum and spec1.base_map.time_rev and spec2.base_map.time_rev:
             # обращаем время и меняем местами
             delta_x = tuple(-dj for dj in delta_x)
-            bm1, bm2 = bm2.reverse_time(), bm1.reverse_time()
+            spec1, spec2 = spec2.reverse_time(), spec1.reverse_time()
 
-        bm1_cube_inv = bm1.cube_map().inverse()
+        bm1_cube_inv = spec1.base_map.cube_map().inverse()
         return cls(
-            spec1=Spec(base_map=bm1_cube_inv * bm1, pnum=spec1.pnum),  # only possible time_rev
-            spec2=Spec(base_map=bm1_cube_inv * bm2, pnum=spec2.pnum),
+            spec1=bm1_cube_inv * spec1,  # only possible time_rev
+            spec2=bm1_cube_inv * spec2,
             delta_x=bm1_cube_inv.apply_vec(delta_x),
             delta_t=1,
         )

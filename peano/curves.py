@@ -4,12 +4,12 @@ import itertools
 from fractions import Fraction
 
 from .utils import get_lcm
-from .base_maps import BaseMap, gen_constraint_cube_maps
+from .base_maps import BaseMap, Spec, gen_constraint_cube_maps
 from .fast_fractions import FastFraction
 from . import fuzzy_curves
 from . import poly_curves
 from . import pieces
-from .common import Junction, Spec, Pattern
+from .common import Junction, Pattern
 
 
 class Curve(fuzzy_curves.FuzzyCurve, poly_curves.PolyCurve):
@@ -36,7 +36,7 @@ class Curve(fuzzy_curves.FuzzyCurve, poly_curves.PolyCurve):
         self.genus = self.div ** self.dim
 
         # to make parent methods work
-        self.patterns = [Pattern(proto=proto, specs=[Spec(base_map=bm) for bm in base_maps])]
+        self.patterns = [Pattern(proto=proto, specs=[Spec(base_map=bm, pnum=0) for bm in base_maps])]
         self.pattern_count = 1
 
     def _data(self):

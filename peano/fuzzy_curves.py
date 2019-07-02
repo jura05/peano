@@ -7,7 +7,8 @@ from . import sat_adapters
 from . import pieces
 from . import curves
 from . import fuzzy_poly_curves
-from .common import Junction, Spec, Pattern
+from .common import Junction, Pattern
+from .base_maps import Spec
 
 
 class FuzzyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
@@ -24,7 +25,7 @@ class FuzzyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
         self.genus = self.div ** self.dim
 
         # to make parent methods work
-        self.patterns = [Pattern(proto=proto, specs=[Spec(base_map=bm) for bm in base_maps])]
+        self.patterns = [Pattern(proto=proto, specs=[Spec(base_map=bm, pnum=0) for bm in base_maps])]
         self.pattern_count = 1
 
     # создать кривую с другим прототипом/base_maps/whatever

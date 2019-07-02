@@ -1,7 +1,6 @@
 from collections import namedtuple
 
-from .base_maps import BaseMap
-from .common import Junction, Spec
+from .common import Junction
 
 
 # pnum - выделенный шаблон, задаёт реальную кривую [0,1]->[0,1]^d
@@ -55,6 +54,7 @@ class FuzzyPolyCurve:
 
         spec1 = junc.spec1
         spec2 = junc.spec2
+
         p1 = self.patterns[spec1.pnum]
         p2 = self.patterns[spec2.pnum]
 
@@ -68,11 +68,8 @@ class FuzzyPolyCurve:
         cube2 = spec2.base_map.apply_cube(self.div, p2.proto[cnum2])
         der_delta = tuple(c2j + dxj * self.div - c1j for c1j, c2j, dxj in zip(cube1, cube2, junc.delta_x))
 
-        bm1 = spec1.base_map * p1.specs[cnum1].base_map
-        bm2 = spec2.base_map * p2.specs[cnum2].base_map
-
         return Junction.get_junc(
-            Spec(base_map=bm1, pnum=p1.specs[cnum1].pnum),
-            Spec(base_map=bm2, pnum=p2.specs[cnum2].pnum),
+            spec1.base_map * p1.specs[cnum1],
+            spec2.base_map * p2.specs[cnum2],
             der_delta,
         )

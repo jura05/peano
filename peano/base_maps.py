@@ -64,6 +64,8 @@ class BaseMap:
 
     def __mul__(self, other):
         """Composition of base maps."""
+        if not isinstance(other, BaseMap):
+            return NotImplemented
         assert self.dim == other.dim
         perm = []
         flip = []
@@ -85,6 +87,9 @@ class BaseMap:
             perm[k] = i
             flip[k] = b
         return type(self)(perm, flip, self.time_rev)
+
+    def __invert__(self):
+        return self.inverse()
 
     def reverse_time(self):
         return type(self)(self.perm, self.flip, not self.time_rev)
@@ -135,3 +140,49 @@ def gen_constraint_cube_maps(dim, points_map):
     for bm in gen_base_maps(dim, time_rev=False):
         if all(bm.apply_x(src) == dst for src, dst in points_map.items()):
             yield bm
+
+
+# спецификация полифрактальной кривой: изометрии + выбор шаблона
+# образует полугруппу по умножению, действует на полифрактальные кривые,
+# BaseMap образует, по сути, подгруппу, не меняя шаблон
+class Spec:
+    """BaseMap + pattern choice."""
+    def __init__(self, base_map, pnum):
+        self.base_map = base_map
+        self.pnum = pnum
+
+    def _data(self):
+        return (self.base_map, self.pnum)
+
+    def __eq__(self, other):
+        return self._data() == other._data()
+
+    def __hash__(self):
+        return hash(self._data())
+
+    def __repr__(self):
+        return '{} * [{}]'.format(self.base_map, self.pnum)
+
+    def __mul__(self, other):
+        if isinstance(other, BaseMap):
+            other_bm = other
+        elif isinstance(other, Spec):
+            other_bm = other.base_map
+        else:
+            return NotImplemented
+        return Spec(self.base_map * other_bm, self.pnum)
+
+    def __rmul__(self, other):
+        pnum = self.pnum
+        if isinstance(other, BaseMap):
+            other_bm = other
+            other_pnum = None
+        elif isinstance(other, Spec):
+            other_bm = other.base_map
+            pnum = other.pnum
+        else:
+            return NotImplemented
+        return Spec(other_bm * self.base_map, pnum)
+
+    def reverse_time(self):
+        return Spec(self.base_map.reverse_time(), self.pnum)

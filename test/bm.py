@@ -22,6 +22,12 @@ class TestBaseMap(unittest.TestCase):
         self.assertEqual(bm * bm.inverse(), BaseMap.id_map(dim=4))
         self.assertEqual(bm, bm.reverse_time().reverse_time())
 
+    def test_op(self):
+        bm = BaseMap(perm=[3,2,1,0], flip=[True,True,True,True], time_rev=True)
+        self.assertEqual(bm * ~bm, BaseMap.id_map(4))
+        self.assertEqual(~bm * bm, BaseMap.id_map(4))
+
+
 
 if __name__ == "__main__":
     unittest.main()
