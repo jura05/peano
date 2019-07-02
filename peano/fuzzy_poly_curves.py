@@ -1,6 +1,7 @@
 from collections import namedtuple
 
-from .common import Junction
+from .common import Pattern, Junction
+from .base_maps import BaseMap, Spec
 
 
 # pnum - выделенный шаблон, задаёт реальную кривую [0,1]->[0,1]^d
@@ -12,6 +13,65 @@ class FuzzyPolyCurve:
         self.pattern_count = len(patterns)
         self.pnum = pnum
         self.genus = div**dim
+
+    def reverse(self):
+        """Reverse time in a curve."""
+        new_patterns = []
+        for pattern in self.patterns:
+            new_pattern = Pattern(
+                proto=tuple(reversed(pattern.proto)),
+                specs=tuple(reversed(pattern.specs)),
+            )
+            new_patterns.append(new_pattern)
+
+        return type(self)(
+            dim=self.dim,
+            div=self.div,
+            patterns=new_patterns,
+        )
+
+    def __rmul__(self, other):
+        """Apply base map to a fractal curve, return new curve."""
+        if isinstance(other, Spec):
+            new_curve = other.base_map * self
+            new_curve.pnum = self.pnum
+            return new_curve
+        elif not isinstance(other, BaseMap):
+            return NotImplemented
+
+        base_map = other
+
+        if base_map.dim != self.dim:
+            raise Exception("Incompatible base map!")
+
+        # можно разложить базовое преобразование в произведение (коммутирующих) 
+        # преобразований: обращение времени с тождественной изометрией  +  изометрии куба
+        if base_map.time_rev:
+            return base_map.cube_map() * self.reverse()
+
+        # применяем изометрию куба
+
+        new_patterns = []
+        for pattern in self.patterns:
+            # прототип подвергается изометрии
+            new_proto = [base_map.apply_cube(self.div, cube) for cube in pattern.proto]
+
+            # базовые преобразования сопрягаются: действительно, чтобы получить
+            # из преобразованной кривой её фракцию, можно сделать так:
+            # - сначала вернуться к исходной кривой (inv)
+            # - применить преобразование исходной кривой для перехода к фракции (bm)
+            # - перейти к преобразованной кривой (base_map)
+            inv = base_map.inverse()
+
+            new_specs = [base_map * spec * inv if spec is not None else None for spec in pattern.specs]
+            new_pattern = Pattern(new_proto, new_specs)
+            new_patterns.append(new_pattern)
+
+        return type(self)(
+            dim=self.dim,
+            div=self.div,
+            patterns=new_patterns,
+        )
 
     #
     # Стыки - общие методы
