@@ -260,29 +260,8 @@ def get_hilbert_bicurve():
     p2 = (curve.proto, [Spec(bm, pnum=(cnt + 1) % 2) for cnt, bm in enumerate(curve.base_maps)])
     return PolyCurve(dim=2, div=2, patterns=[p1,p2])
 
-"""
 
-# Tetrafractal curve
-def get_ARW_Curve(k):
-
-    chain_code = [['i','Ij','i'],'jiJ','jiJ','jiJ'],
-    bases = [['3ij0','1jI1','2Ji0','1iJ0'],
-             ['3ji0','2Ij1','1ij0','1JI0'],
-             ['0ji0','1Ji0','0jI0','1JI0'],
-             ['0ij0','2Ji0','0jI0','3Ji1']]
-    return Curve(
-        proto=chain2proto(chain_code),
-        base_maps=[basis2base_map(b) for b in bases],
-    )
-
-"""
-
-# Minimal 2D monofractal curve in L_1 (9), L_2 (5), L_inf (5)
-def get_beta_Omega_Curve():
-    chain_code_list = ['jiJ','jiJ']
-    bases_list = [['1iJ0','1Ji0','1ji1','1IJ1'],
-             ['1iJ0','1Ji0','1ji1','0jI0']]
-
+def get_patterns(chain_code_list, bases_list):
     patterns = []
     for chain_code, rich_bases in zip(chain_code_list, bases_list):
         specs = []
@@ -292,32 +271,44 @@ def get_beta_Omega_Curve():
             specs.append(spec)
         proto = chain2proto(chain_code)
         patterns.append((proto, specs))
+    return patterns
 
-    return PolyCurve(dim=2, div=2, patterns=patterns)
+# Tetrafractal curve
+def get_ARW_Curve():
+    chain_code = [['i','Ij','i'],'jiJ','jiJ','jiJ'],
+    bases = [['3ij0','1jI1','2Ji0','1iJ0'],
+             ['3ji0','2Ij1','1ij0','1JI0'],
+             ['0ji0','1Ji0','0jI0','1JI0'],
+             ['0ij0','2Ji0','0jI0','3Ji1']]
+    return Curve(dim=2, div=2, patterns=get_patterns(chain_code, bases))
 
-"""
+
+# Minimal 2D monofractal curve in L_1 (9), L_2 (5), L_inf (5)
+def get_beta_Omega_Curve():
+    chain_code_list = ['jiJ','jiJ']
+    bases_list = [['1iJ0','1Ji0','1ji1','1IJ1'],
+             ['1iJ0','1Ji0','1ji1','0jI0']]
+    return PolyCurve(dim=2, div=2, patterns=get_patterns(chain_code_list, bases_list))
+
 
 # Minimal 3D bifractal curve in L_inf (9.45)
 # Is minimal L_2 (18.3)?
 def get_neptunus_curve():
-    
     chain_code = ['kjKikJK','kiKjIki']
     bases = [['0kji','1kji','1KiJ','1jKI','1ikj','1KJi','0kJI','1jKI'],
              ['0jki','1jki','1iKJ','0KiJ','1JiK','1IKj','0ikj','1ijk']]
-    return Curve(
-        proto=chain2proto(chain_code),
-        base_maps=[basis2base_map(b) for b in bases],
+    return PolyCurve(
+        dim=3, div=2,
+        patterns=get_patterns(chain_code, bases),
     )
  
 
 # Is minimal L_1 (89.8) and L_2 (18.3)?
 def get_luna_curve():
-    
     chain_code = ['kjKikJK','kiKjIki']
     bases = [['1ijk','0KJi','1KiJ','1jKI','1jik','1IKj','0kJI','1kJI'],
              ['1jik','0JKi','1iKJ','0KiJ','1KjI','1JIk','0ikj','1ikj']]
-    return Curve(
-        proto=chain2proto(chain_code),
-        base_maps=[basis2base_map(b) for b in bases],
+    return PolyCurve(
+        dim=3, div=2,
+        patterns=get_patterns(chain_code, bases),
     )
-"""
