@@ -29,10 +29,8 @@ class FuzzyCurve:
         self.pattern_count = len(self.patterns)
         self.pnum = pnum
 
-        # legacy
         self.proto = self.patterns[pnum].proto
         self.specs = self.patterns[pnum].specs
-        self.base_maps = [sp.base_map if sp is not None else None for sp in self.specs]
 
         self.genus = div**dim
 

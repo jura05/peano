@@ -9,6 +9,12 @@ from . import pieces
 
 class Curve(fuzzy_curves.FuzzyCurve):
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.pattern_count == 1:
+            # legacy
+            self.base_maps = [sp.base_map for sp in self.specs]
+
     #
     # Точки входа-выхода
     #
@@ -22,101 +28,6 @@ class Curve(fuzzy_curves.FuzzyCurve):
         """Exit of a curve, i.e. point f(1)."""
         start, period = self._get_cubes(self.genus-1)
         return self._get_cube_limit(start, period)
-
-    def get_vertex_moments(self):
-        # строим список всех вершин
-        vertices = [[]]
-        for j in range(self.dim):
-            new_vertices = []
-            for xj in [0,1]:
-                for edge in vertices:
-                    new_edge = edge + [xj]
-                    new_vertices.append(new_edge)
-            vertices = new_vertices
-        moment = {}
-        for v in vertices:
-            moment[tuple(v)] = self.get_edge_touch(v)
-        return moment
-
-    def get_vertex_brkline(self):
-        # строим ломаную (BRoKen LINE) из вершин фракций и моментов в порядке прохождения
-        vm = self.get_vertex_moments()
-        
-        # ломаная для самой кривой
-        brkline = [(v,vm[v]) for v in sorted(vm.keys(), key=lambda x:vm[x])]
-        
-        # локаная для кривой с обращенным временем
-        brkline_rev = [(v,1-t) for v,t in reversed(brkline)]  # моменты при прохождении обратной кривой
-        result = []
-        for cnum, cube, base_map in zip(range(self.genus), self.proto, self.base_maps):
-            if base_map.time_rev:
-                curr_brkline = brkline_rev
-            else:
-                curr_brkline = brkline
-            for v,t in curr_brkline:
-                # есть вершина и момент
-                # сначала поворачиваем, потом переносим во фракцию
-                bv = base_map.apply_x(v)
-                real_bv = [Fraction(cube[j] + bv[j], self.div) for j in range(self.dim)]
-                real_t = Fraction(cnum + t, self.genus)
-                result.append((real_bv, real_t))
-
-        # удаляем дублирующиеся точки перехода
-        new_result = []
-        for i, r in enumerate(result):
-            if i >= 1 and r == result[i-1]:
-                # точка перехода
-                continue
-            new_result.append(r)
-        assert len(new_result) == self.genus * (2**self.dim-1) + 1
-        return result
-
-    def get_edge_touch(self, edge):
-        """Find moment of first edge touch.
-        Edge is a tuple of {0,1,None} defining a set
-        {(x_0,...,x_{d-1}): x_i==0 if e[i]==0, x_i==1 if e[i]==1, or arbitrary x[i] if e[i] is None.
-        E.g., tuples (0,0,0) or (0,1,1) define vertices
-        """
-        curve = self
-        cur_map = BaseMap.id_map(self.dim)  # curve = cur_map * self
-        cnums = []
-        index = {}
-        while True:
-            cnum = curve._get_edge_cnum(edge)
-            bm = curve.base_maps[cnum]
-            cnums.append(cnum)
-
-            index[cur_map] = len(cnums)-1
-
-            cur_map = bm * cur_map
-            if cur_map in index:
-                period_start = index[cur_map]
-                break
-            curve = bm * curve
-
-        return self._get_time_limit(cnums[0:period_start], cnums[period_start:])
-
-    def _get_edge_cnum(self, edge):
-        # какой куб из прототипа первым касается грани
-        N = self.div
-        for cnum, cube in enumerate(self.proto):
-            # проверяем, что куб касается грани
-            touch = True
-            for x, e in zip(cube, edge):
-                if e is None:
-                    continue
-                elif e == 1 and x != (N-1):
-                    touch = False
-                    break
-                elif e == 0 and x != 0:
-                    touch = False
-                    break
-            if touch:
-                return cnum
-
-    def _get_time_limit(self, start, period):
-        # задана начальная и периодическая последовательность номеров кубов, считаем время
-        return self._get_periodic_sum(start, period, self.genus)
 
     def _get_cubes(self, cnum):
         # находим последовательность вложенных кубов, которая получится, если в каждой фракции брать куб с номером cnum
@@ -188,9 +99,6 @@ class Curve(fuzzy_curves.FuzzyCurve):
     def get_junctions(self):
         return list(self.gen_junctions())
 
-    #
-
-    # кандидаты в self.base_maps[cnum]
     def gen_allowed_specs(self, pnum, cnum):
         yield self.patterns[pnum].specs[cnum]
 
@@ -300,8 +208,112 @@ class Curve(fuzzy_curves.FuzzyCurve):
         )
 
     #
-    # old Curve methods, not supported currently
+    # old Curve methods, not supported for polyfractals
     #
+
+    def get_vertex_moments(self):
+        if self.pattern_count > 1:
+            raise NotImplementedError("Not implemented for poly curves")
+        # строим список всех вершин
+        vertices = [[]]
+        for j in range(self.dim):
+            new_vertices = []
+            for xj in [0,1]:
+                for edge in vertices:
+                    new_edge = edge + [xj]
+                    new_vertices.append(new_edge)
+            vertices = new_vertices
+        moment = {}
+        for v in vertices:
+            moment[tuple(v)] = self.get_edge_touch(v)
+        return moment
+
+    def get_vertex_brkline(self):
+        if self.pattern_count > 1:
+            raise NotImplementedError("Not implemented for poly curves")
+        # строим ломаную (BRoKen LINE) из вершин фракций и моментов в порядке прохождения
+        vm = self.get_vertex_moments()
+        
+        # ломаная для самой кривой
+        brkline = [(v,vm[v]) for v in sorted(vm.keys(), key=lambda x:vm[x])]
+        
+        # локаная для кривой с обращенным временем
+        brkline_rev = [(v,1-t) for v,t in reversed(brkline)]  # моменты при прохождении обратной кривой
+        result = []
+        for cnum, cube, base_map in zip(range(self.genus), self.proto, self.base_maps):
+            if base_map.time_rev:
+                curr_brkline = brkline_rev
+            else:
+                curr_brkline = brkline
+            for v,t in curr_brkline:
+                # есть вершина и момент
+                # сначала поворачиваем, потом переносим во фракцию
+                bv = base_map.apply_x(v)
+                real_bv = [Fraction(cube[j] + bv[j], self.div) for j in range(self.dim)]
+                real_t = Fraction(cnum + t, self.genus)
+                result.append((real_bv, real_t))
+
+        # удаляем дублирующиеся точки перехода
+        new_result = []
+        for i, r in enumerate(result):
+            if i >= 1 and r == result[i-1]:
+                # точка перехода
+                continue
+            new_result.append(r)
+        assert len(new_result) == self.genus * (2**self.dim-1) + 1
+        return result
+
+    def get_edge_touch(self, edge):
+        """Find moment of first edge touch.
+        Edge is a tuple of {0,1,None} defining a set
+        {(x_0,...,x_{d-1}): x_i==0 if e[i]==0, x_i==1 if e[i]==1, or arbitrary x[i] if e[i] is None.
+        E.g., tuples (0,0,0) or (0,1,1) define vertices
+        """
+        if self.pattern_count > 1:
+            raise NotImplementedError("Not implemented for poly curves")
+        curve = self
+        cur_map = BaseMap.id_map(self.dim)  # curve = cur_map * self
+        cnums = []
+        index = {}
+        while True:
+            cnum = curve._get_edge_cnum(edge)
+            bm = curve.base_maps[cnum]
+            cnums.append(cnum)
+
+            index[cur_map] = len(cnums)-1
+
+            cur_map = bm * cur_map
+            if cur_map in index:
+                period_start = index[cur_map]
+                break
+            curve = bm * curve
+
+        return self._get_time_limit(cnums[0:period_start], cnums[period_start:])
+
+    def _get_edge_cnum(self, edge):
+        if self.pattern_count > 1:
+            raise NotImplementedError("Not implemented for poly curves")
+        # какой куб из прототипа первым касается грани
+        N = self.div
+        for cnum, cube in enumerate(self.proto):
+            # проверяем, что куб касается грани
+            touch = True
+            for x, e in zip(cube, edge):
+                if e is None:
+                    continue
+                elif e == 1 and x != (N-1):
+                    touch = False
+                    break
+                elif e == 0 and x != 0:
+                    touch = False
+                    break
+            if touch:
+                return cnum
+
+    def _get_time_limit(self, start, period):
+        # задана начальная и периодическая последовательность номеров кубов, считаем время
+        return self._get_periodic_sum(start, period, self.genus)
+
 
     def get_subdivision(self, k=1):
         """Get k-th subdivision of a curve."""
