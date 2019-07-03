@@ -30,8 +30,8 @@ class TestCurve(unittest.TestCase):
         for curve in self.curves:
             pcurve = curve.forget(allow_time_rev=True)
             cnum = 0
-            for bm in pcurve.gen_allowed_maps(cnum):
-                scurve = pcurve.specify(pnum=0, cnum=cnum, spec=Spec(bm))
+            for sp in pcurve.gen_allowed_specs(pnum=0, cnum=cnum):
+                scurve = pcurve.specify(pnum=0, cnum=cnum, spec=sp)
                 piece = scurve.get_fraction(cnum)
 
         curve0 = self.curves[0].forget()

@@ -167,7 +167,7 @@ class CurveSATAdapter:
 
     # для отладки
     def get_model_from_curve(self, curve):
-        for cnum, pnum, sp in curve.sp_info():
+        for pnum, cnum, sp in curve.sp_info():
             sp_var = self.get_sp_var(pnum, cnum, sp)
             self.append_clause({sp_var: True})
 

@@ -36,6 +36,9 @@ class FuzzyCurve:
 
         self.genus = div**dim
 
+    def get_fraction(self, cnum):
+        return self.specs[cnum] * self
+
     # создать кривую с другими данным
     def changed(self, patterns=None, pnum=None, **kwargs):
         return type(self)(
