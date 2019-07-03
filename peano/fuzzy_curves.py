@@ -67,40 +67,19 @@ class FuzzyCurve:
         """Reverse time in a curve."""
         new_patterns = []
         for pattern in self.patterns:
-            new_pattern = (
-                # прототип проходится в обратном порядке
-                reversed(pattern.proto),
+            # прототип проходится в обратном порядке
+            new_proto = reversed(pattern.proto)
 
-                # базовые преобразования проходятся в обратном порядке
-                # сами по себе они не меняются:
-                #   - если обращения времени не было, то его и не будет
-                #   - изометрия куба не меняется, т.к. время не играет роли
-                reversed(pattern.specs),
-            )
-            new_patterns.append(new_pattern)
+            # базовые преобразования проходятся в обратном порядке
+            # сами по себе они не меняются:
+            #   - если обращения времени не было, то его и не будет
+            #   - изометрия куба не меняется, т.к. время не играет роли
+            new_specs = reversed(pattern.specs)
+            new_patterns.append((new_proto, new_specs))
 
         return self.changed(patterns=new_patterns)
 
-    def __rmul__(self, other):
-        """Apply base map/spec to a fractal curve, return new curve."""
-        if isinstance(other, Spec):
-            new_curve = other.base_map * self
-            return new_curve.changed(pnum=other.pnum)
-        elif not isinstance(other, BaseMap):
-            return NotImplemented
-
-        base_map = other
-
-        if base_map.dim != self.dim:
-            raise Exception("Incompatible base map!")
-
-        # можно разложить базовое преобразование в произведение (коммутирующих) 
-        # преобразований: обращение времени с тождественной изометрией  +  изометрии куба
-        if base_map.time_rev:
-            return base_map.cube_map() * self.reverse()
-
-        # применяем изометрию куба
-
+    def apply_cube_map(self, base_map):
         new_patterns = []
         for pattern in self.patterns:
             # прототип подвергается изометрии
@@ -122,6 +101,26 @@ class FuzzyCurve:
             new_patterns.append((new_proto, new_specs))
 
         return self.changed(patterns=new_patterns)
+
+    def __rmul__(self, other):
+        """Apply base map/spec to a fractal curve, return new curve."""
+        if isinstance(other, Spec):
+            new_curve = other.base_map * self
+            return new_curve.changed(pnum=other.pnum)
+        elif not isinstance(other, BaseMap):
+            return NotImplemented
+
+        base_map = other
+
+        if base_map.dim != self.dim:
+            raise Exception("Incompatible base map!")
+
+        # можно разложить базовое преобразование в произведение (коммутирующих) 
+        # преобразований: обращение времени с тождественной изометрией  +  изометрии куба
+        if base_map.time_rev:
+            return base_map.cube_map() * self.reverse()
+
+        return self.apply_cube_map(base_map.cube_map())
 
     def gen_allowed_specs(self, pnum, cnum):
         raise NotImplementedError("Define in child class")
@@ -429,28 +428,17 @@ class SymmFuzzyCurve(FuzzyCurve):
             new_patterns_symm.append((tuple(reversed(repr_specs)), symmetries))
         return super().reverse().changed(patterns_symm=new_patterns_symm)
 
-    def __rmul__(self, other):
-        # TODO: remove copypaste
-        if isinstance(other, Spec):
-            new_curve = other.base_map * self
-            return new_curve.changed(pnum=other.pnum)
-        elif not isinstance(other, BaseMap):
-            return NotImplemented
-        base_map = other
-
-        if base_map.time_rev:
-            return base_map.cube_map() * self.reverse()
-
-        curve = super().__rmul__(base_map)
-        inv = base_map.inverse()
+    def apply_cube_map(self, cube_map):
+        curve = super().apply_cube_map(cube_map)
+        inv = cube_map.inverse()
         conj_cache = {}
         def conjugate(sp):
             if sp not in conj_cache:
-                conj_cache[sp] = base_map * sp * inv
+                conj_cache[sp] = cube_map * sp * inv
             return conj_cache[sp]
 
         new_patterns_symm = []
-        for repr_specs, symmetries in self.patterns_symm:
+        for repr_specs, symmetries in curve.patterns_symm:
             new_repr_specs = [conjugate(sp) for sp in repr_specs]
             new_symmetries = [conjugate(bm) for bm in symmetries]
             new_patterns_symm.append((tuple(new_repr_specs), new_symmetries))
