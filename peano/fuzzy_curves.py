@@ -53,18 +53,17 @@ class FuzzyCurve:
         # предполагается, что все gen_allowed_specs совместимы!
         sp_variants = []
         G = self.genus
-        # делаем большой список вариантов, по pnum * genus + cnum; TODO - сделать по-красивше
+        # делаем большой список генераторов вариантов, по pnum * genus + cnum; TODO - сделать по-красивше
         for pnum in range(self.pattern_count):
             sp_variants += [self.gen_allowed_specs(pnum, cnum) for cnum in range(G)]
 
         for all_specs in itertools.product(*sp_variants):
             patterns = []
-            for pnum in range(self.pattern_count):
+            for pnum, pattern in enumerate(self.patterns):
                 specs = all_specs[pnum * G:(pnum + 1) * G]
-                proto = self.patterns[pnum].proto
-                patterns.append((proto, specs))
+                patterns.append((pattern.proto, specs))
 
-            yield curves.Curve(dim=self.dim, div=self.div, patterns=patterns)
+            yield curves.Curve(dim=self.dim, div=self.div, patterns=patterns, pnum=self.pnum)
 
     def reverse(self):
         """Reverse time in a curve."""
@@ -468,7 +467,9 @@ class SymmFuzzyCurve(FuzzyCurve):
             return
 
         repr_specs, symmetries = self.patterns_symm[pnum]
-        repr_spec = repr_specs[cnum]
+        repr_spec = self.patterns_symm[pnum][0][cnum]
+        # симметрии надо брать для другого шаблона!
+        symmetries = self.patterns_symm[repr_spec.pnum][1]
         for symm in symmetries:
             yield repr_spec * symm  # в этом порядке?
 
