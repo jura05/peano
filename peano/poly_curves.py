@@ -1,8 +1,9 @@
 from fractions import Fraction
 
 from .fast_fractions import FastFraction
-from . import fuzzy_poly_curves
 from .base_maps import BaseMap, Spec
+from .utils import get_lcm
+from . import fuzzy_poly_curves
 from . import pieces
 
 
@@ -173,3 +174,20 @@ class PolyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
             res['argmax'] = argmax
 
         return res
+
+
+class IntegerBrokenLine:
+    def __init__(self, dim, brkline):
+        denoms = set()
+        for x, t in brkline:
+            if isinstance(t, Fraction):
+                denoms.add(t.denominator)
+            for xj in x:
+                if isinstance(xj, Fraction):
+                    denoms.add(xj.denominator)
+        lcm = get_lcm(denoms)
+        mx = lcm
+        mt = lcm**dim
+        self.points = [([int(xj * mx) for xj in x], int(t * mt)) for x, t in brkline]
+        self.mx = mx
+        self.mt = mt

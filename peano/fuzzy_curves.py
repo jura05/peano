@@ -9,7 +9,7 @@ from . import pieces
 from . import curves
 from . import fuzzy_poly_curves
 from .common import Junction
-from .base_maps import Spec, BaseMap
+from .base_maps import Spec, BaseMap, gen_constraint_cube_maps
 
 
 class FuzzyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
@@ -272,3 +272,34 @@ class SymmFuzzyCurve(FuzzyCurve):
         repr_map = self.repr_maps[cnum]
         for symm in self.symmetries:
             yield Spec(repr_map * symm)
+
+    @classmethod
+    def init_from_brkline(cls, dim, div, brkline, allow_time_rev):
+        proto = [brk[0] for brk in brkline]
+
+        cube_first, entr_first, _ = brkline[0]
+        entr = tuple(Fraction(cj + ej, div) for cj, ej in zip(cube_first, entr_first))
+
+        cube_last, _, exit_last = brkline[-1]
+        exit = tuple(Fraction(cj + ej, div) for cj, ej in zip(cube_last, exit_last))
+
+        symmetries = []
+        for bm in gen_constraint_cube_maps(dim, {entr: entr, exit: exit}):
+            symmetries.append(bm)
+        if allow_time_rev:
+            for bm in gen_constraint_cube_maps(dim, {entr: exit, exit: entr}):
+                symmetries.append(bm.reverse_time())
+
+        base_maps = [None] * len(proto)
+        repr_maps = [None] * len(proto)
+
+        for cnum, brk in enumerate(brkline):
+            cube, rel_entr, rel_exit = brk
+            repr_maps[cnum] = next(gen_constraint_cube_maps(dim, {entr: rel_entr, exit: rel_exit}))
+
+        return cls(
+            dim=dim, div=div,
+            patterns=[(proto, base_maps)],
+            repr_maps=repr_maps,
+            symmetries=symmetries,
+        )
