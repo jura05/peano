@@ -3,13 +3,13 @@ import itertools
 
 from pysat.solvers import *
 
-from . import curves
+from . import poly_curves
 from .base_maps import gen_base_maps
 from .common import Junction
 
 # clause = {var: True|False}
 # var - hashable, в числа переводится непосредственно перед вызовом солвера
-# token - пара (var, True|False), предполагаем что каждый bm задаётся токеном
+# token - пара (var, True|False), предполагаем что каждый sp задаётся токеном
 class CurveSATAdapter:
     def __init__(self, dim):
         self.dim = dim
@@ -17,8 +17,8 @@ class CurveSATAdapter:
         self.curve_vars = set()  # переменные кривых, условия для которых уже записаны
         self.var_no = {}
 
-    def get_bm_var(self, cnum, bm):
-        return ('base_map', cnum, bm)
+    def get_sp_var(self, pnum, cnum, sp):
+        return ('spec', pnum, cnum, sp)
 
     def get_junc_var(self, junc):
         return ('junc', junc)
@@ -34,8 +34,9 @@ class CurveSATAdapter:
     # инициализация условий для заданной Partial-кривой
     def init_curve(self, curve):
         # возможные base_map-ы:
-        for cnum in range(curve.genus):
-            self.make_only([self.get_bm_var(cnum, bm) for bm in curve.gen_allowed_maps(cnum)])
+        for pnum in range(curve.pattern_count):
+            for cnum in range(curve.genus):
+                self.make_only([self.get_sp_var(pnum, cnum, sp) for sp in curve.gen_allowed_specs(pnum, cnum)])
 
         # автостыки - есть у каждой кривой
         for junc in curve.gen_auto_junctions():
@@ -49,17 +50,17 @@ class CurveSATAdapter:
     # создать переменную Z, такую что Z=True <=> кривая согласуется с данной
     # добавляем условия эквивалентности
     def make_curve_var(self, curve):
-        curve_info = tuple((cnum, bm) for cnum, bm in enumerate(curve.base_maps) if bm is not None)
+        curve_info = tuple(curve.sp_info())
         Z = ('curve', curve_info)
         if Z in self.curve_vars:
             return Z
         # Z <-> curve  <=>  (Z->curve) and (curve->Z)
         # Z->curve  <=>  !Z or curve  <=>  (!Z or bm1) and (!Z or bm2) and ... (!Z or bmk)
-        for cnum, bm in curve_info:
-            self.append_clause({Z: False, self.get_bm_var(cnum, bm): True})
+        for pnum, cnum, sp in curve_info:
+            self.append_clause({Z: False, self.get_sp_var(pnum, cnum, sp): True})
 
         # curve->Z  <=>  !curve or Z  <=>  !bm1 or !bm2 or ... or !bmk or Z
-        clause_rev = {self.get_bm_var(cnum, bm): False for cnum, bm in curve_info}
+        clause_rev = {self.get_sp_var(pnum, cnum, sp): False for pnum, cnum, sp in curve_info}
         clause_rev[Z] = True
         self.append_clause(clause_rev)
 
@@ -88,7 +89,7 @@ class CurveSATAdapter:
     # !(J and bm1 and bm2 .. and bmk) = !J or !bm1 or !bm1 ..
     def add_forbid_clause(self, junc, curve):
         junc_var = self.get_junc_var(junc)
-        clause = {self.get_bm_var(cnum, bm): False for cnum, bm in curve.bm_info().items()}
+        clause = {self.get_sp_var(pnum, cnum, sp): False for pnum, cnum, sp in curve.sp_info()}
         clause[junc_var] = False
         self.append_clause(clause)
 
@@ -134,18 +135,24 @@ class CurveSATAdapter:
     def get_curve_from_model(self, curve, model):
         base_maps = []
         allowed_by_model_variants = []
-        for cnum in range(curve.genus):
-            allowed_by_model = []
-            for bm in curve.gen_allowed_maps(cnum):
-                bm_var = self.get_bm_var(cnum, bm)
-                if (bm_var not in model) or model[bm_var]:
-                    allowed_by_model.append(bm)
-            if not allowed_by_model:
-                return
-            allowed_by_model_variants.append(allowed_by_model)
+        for pnum in range(curve.pattern_count):
+            for cnum in range(curve.genus):
+                allowed_by_model = []
+                for sp in curve.gen_allowed_specs(pnum, cnum):
+                    sp_var = self.get_sp_var(pnum, cnum, sp)
+                    if (sp_var not in model) or model[sp_var]:
+                        allowed_by_model.append(sp)
+                if not allowed_by_model:
+                    return
+                allowed_by_model_variants.append(allowed_by_model)
 
-        for base_maps in itertools.product(*allowed_by_model_variants):
-            full_curve = curves.Curve(dim=curve.dim, div=curve.div, patterns=[(curve.proto, base_maps)])
+        for all_specs in itertools.product(*allowed_by_model_variants):
+            # опять надо нарезать по pnum :( 
+            patterns = []
+            for pnum, pattern in enumerate(curve.patterns):
+                specs = all_specs[pnum * curve.genus : (pnum + 1) * curve.genus]
+                patterns.append((pattern.proto, specs))
+            full_curve = poly_curves.PolyCurve(dim=curve.dim, div=curve.div, patterns=patterns)
             has_bad_juncs = False
             for junc in full_curve.gen_junctions():
                 junc_var = self.get_junc_var(junc)
@@ -160,6 +167,7 @@ class CurveSATAdapter:
 
     # для отладки
     def get_model_from_curve(self, curve):
+        raise NotImplementedError
         for cnum, bm in enumerate(curve.base_maps):
             if bm is not None:
                 bm_var = self.get_bm_var(cnum, bm)

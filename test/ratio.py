@@ -11,7 +11,7 @@ from peano.fast_fractions import FastFraction
 from peano.examples import *
 from peano import utils
 from peano.gen_curve import CurveGenerator
-from peano.fuzzy_curves import SymmFuzzyCurve
+from peano.fuzzy_poly_curves import SymmFuzzyPolyCurve
 
 
 class TestCurve(unittest.TestCase):
@@ -135,7 +135,7 @@ class TestCurve(unittest.TestCase):
                 brk0 = brkline
                 break
 
-        pcurve = SymmFuzzyCurve.init_from_brkline(2, 5, brk0, allow_time_rev=True)
+        pcurve = SymmFuzzyPolyCurve.init_from_brkline(2, 5, brk0, allow_time_rev=True)
         curve = pcurve.estimate_ratio(utils.ratio_l2_squared, rel_tol_inv=10000, find_model=True)['curve']
         ratio = curve.estimate_ratio(utils.ratio_l2_squared, rel_tol_inv=10000, use_vertex_brkline=True, verbose=False)
 

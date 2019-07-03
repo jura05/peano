@@ -15,10 +15,6 @@ class Junction:
         self.delta_x = delta_x
         self.delta_t = delta_t
 
-        # for backwards compatibility
-        self.time_rev = self.spec1.base_map.time_rev
-        self.base_map = self.spec2.base_map
-
     # обычный стык
     @classmethod
     def get_junc(cls, spec1, spec2, delta_x):

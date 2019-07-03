@@ -106,7 +106,6 @@ class CurvePiece:
             # для prev_curve.base_maps[active_cnum] = bm =>  orig_curve.base_maps[spec_cnum] = ...
             new_spec = prev_spec.base_map.inverse() * sp * prev_spec.base_map
             specified_curve = curve.specify(active_pnum, spec_cnum, new_spec)
-
             last_curve = sp * prev_curve
             for cnum, cube in enumerate(last_curve.proto):
                 new_pos = self.pos.specify(cnum, cube)

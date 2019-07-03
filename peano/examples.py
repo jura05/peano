@@ -1,7 +1,6 @@
 # coding: utf-8
 
-from .poly_curves import PolyCurve
-from .curves import Curve
+from .poly_curves import PolyCurve as Curve
 from .base_maps import BaseMap
 from .utils import chain2proto, basis2base_map
 from .common import Spec
@@ -258,7 +257,7 @@ def get_hilbert_bicurve():
     curve = get_hilbert_curve()
     p1 = (curve.proto, [Spec(bm, pnum=cnt % 2) for cnt, bm in enumerate(curve.base_maps)])
     p2 = (curve.proto, [Spec(bm, pnum=(cnt + 1) % 2) for cnt, bm in enumerate(curve.base_maps)])
-    return PolyCurve(dim=2, div=2, patterns=[p1,p2])
+    return Curve(dim=2, div=2, patterns=[p1,p2])
 
 
 def get_patterns(chain_code_list, bases_list):
@@ -288,7 +287,7 @@ def get_beta_Omega_Curve():
     chain_code_list = ['jiJ','jiJ']
     bases_list = [['1iJ0','1Ji0','1ji1','1IJ1'],
              ['1iJ0','1Ji0','1ji1','0jI0']]
-    return PolyCurve(dim=2, div=2, patterns=get_patterns(chain_code_list, bases_list))
+    return Curve(dim=2, div=2, patterns=get_patterns(chain_code_list, bases_list))
 
 
 # Minimal 3D bifractal curve in L_inf (9.45)
@@ -297,7 +296,7 @@ def get_neptunus_curve():
     chain_code = ['kjKikJK','kiKjIki']
     bases = [['0kji','1kji','1KiJ','1jKI','1ikj','1KJi','0kJI','1jKI'],
              ['0jki','1jki','1iKJ','0KiJ','1JiK','1IKj','0ikj','1ijk']]
-    return PolyCurve(
+    return Curve(
         dim=3, div=2,
         patterns=get_patterns(chain_code, bases),
     )
@@ -308,7 +307,7 @@ def get_luna_curve():
     chain_code = ['kjKikJK','kiKjIki']
     bases = [['1ijk','0KJi','1KiJ','1jKI','1jik','1IKj','0kJI','1kJI'],
              ['1jik','0JKi','1iKJ','0KiJ','1KjI','1JIk','0ikj','1ikj']]
-    return PolyCurve(
+    return Curve(
         dim=3, div=2,
         patterns=get_patterns(chain_code, bases),
     )

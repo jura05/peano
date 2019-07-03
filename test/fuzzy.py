@@ -25,7 +25,7 @@ class TestCurve(unittest.TestCase):
             pcurve = curve.forget()
             rrcurve = pcurve.reverse().reverse()
             self.assertEqual(pcurve.proto, rrcurve.proto)
-            self.assertEqual(pcurve.bm_info(), rrcurve.bm_info())
+            self.assertEqual(pcurve.sp_info(), rrcurve.sp_info())
 
         for curve in self.curves:
             pcurve = curve.forget(allow_time_rev=True)

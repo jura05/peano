@@ -14,6 +14,7 @@ class TestCurve(unittest.TestCase):
     def setUp(self):
         self.curves = [
             get_hilbert_bicurve(),
+            get_beta_Omega_Curve(),
             #get_ARW_Curve(),
             get_neptunus_curve(),
             get_luna_curve(),
@@ -59,6 +60,12 @@ class TestCurve(unittest.TestCase):
                     current = bm * current
                 self.assertEqual(orig.patterns[0].proto, current.patterns[0].proto)
                 self.assertEqual(orig.patterns[0].specs, current.patterns[0].specs)
+
+    def test_forget(self):
+        for curve in self.curves:
+            curve.forget().gen_possible_curves()
+
+
 
 
 if __name__ == "__main__":
