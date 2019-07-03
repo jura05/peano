@@ -6,13 +6,13 @@ from .common import Junction
 from .base_maps import BaseMap, Spec, gen_constraint_cube_maps
 from .fast_fractions import FastFraction
 from . import pieces
-from . import poly_curves
+from . import curves
 from . import sat_adapters
 
 
 # patterns - список пар (proto, specs)
 # pnum - выделенный шаблон, задаёт реальную кривую [0,1]->[0,1]^d
-class FuzzyPolyCurve:
+class FuzzyCurve:
     Pattern = namedtuple('Pattern', ['proto', 'specs'])
 
     def __init__(self, dim, div, patterns, pnum=0):
@@ -23,7 +23,7 @@ class FuzzyPolyCurve:
         for proto, specs in patterns:
             proto = (tuple(cube) for cube in proto)
             specs = (sp if isinstance(sp, Spec) else Spec(sp) if sp is not None else None for sp in specs)
-            pattern = FuzzyPolyCurve.Pattern(proto=tuple(proto), specs=tuple(specs))
+            pattern = FuzzyCurve.Pattern(proto=tuple(proto), specs=tuple(specs))
             self.patterns.append(pattern)
 
         self.pattern_count = len(self.patterns)
@@ -61,7 +61,7 @@ class FuzzyPolyCurve:
                 proto = self.patterns[pnum].proto
                 patterns.append((proto, specs))
 
-            yield poly_curves.PolyCurve(dim=self.dim, div=self.div, patterns=patterns)
+            yield curves.Curve(dim=self.dim, div=self.div, patterns=patterns)
 
     def reverse(self):
         """Reverse time in a curve."""
@@ -412,7 +412,7 @@ class FuzzyPolyCurve:
 # patterns_symm - список пар (для каждого паттерна):
 #   repr_specs - список представителей (coset representatives) spec-ов
 #   symmetries - симметрии кривой (пока только base_map-ы, pnum-ы не меняем!)
-class SymmFuzzyPolyCurve(FuzzyPolyCurve):
+class SymmFuzzyCurve(FuzzyCurve):
     def __init__(self, *args, **kwargs):
         patterns_symm = kwargs.pop('patterns_symm')
         super().__init__(*args, **kwargs)

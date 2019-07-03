@@ -7,7 +7,7 @@ import logging
 import itertools
 
 from . import base_maps
-from .poly_curves import PolyCurve as Curve
+from .curves import Curve
 
 
 # head - квадрат конца пути

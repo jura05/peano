@@ -1,6 +1,6 @@
 # coding: utf-8
 
-from .poly_curves import PolyCurve as Curve
+from .curves import Curve
 from .base_maps import BaseMap
 from .utils import chain2proto, basis2base_map
 from .common import Spec

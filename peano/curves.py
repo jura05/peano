@@ -3,11 +3,11 @@ from fractions import Fraction
 from .fast_fractions import FastFraction
 from .base_maps import BaseMap, Spec, gen_constraint_cube_maps
 from .utils import get_lcm
-from . import fuzzy_poly_curves
+from . import fuzzy_curves
 from . import pieces
 
 
-class PolyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
+class Curve(fuzzy_curves.FuzzyCurve):
 
     #
     # Точки входа-выхода
@@ -292,7 +292,7 @@ class PolyCurve(fuzzy_poly_curves.FuzzyPolyCurve):
             patterns_symm.append((repr_specs, symmetries))
             patterns.append((pattern.proto, [None] * self.genus))  # забыли спеки!
 
-        return fuzzy_poly_curves.SymmFuzzyPolyCurve(
+        return fuzzy_curves.SymmFuzzyCurve(
             dim=self.dim,
             div=self.div,
             patterns=patterns,

@@ -3,7 +3,7 @@ import itertools
 
 from pysat.solvers import *
 
-from . import poly_curves
+from . import curves
 from .base_maps import gen_base_maps
 from .common import Junction
 
@@ -152,7 +152,7 @@ class CurveSATAdapter:
             for pnum, pattern in enumerate(curve.patterns):
                 specs = all_specs[pnum * curve.genus : (pnum + 1) * curve.genus]
                 patterns.append((pattern.proto, specs))
-            full_curve = poly_curves.PolyCurve(dim=curve.dim, div=curve.div, patterns=patterns)
+            full_curve = curves.Curve(dim=curve.dim, div=curve.div, patterns=patterns)
             has_bad_juncs = False
             for junc in full_curve.gen_junctions():
                 junc_var = self.get_junc_var(junc)
@@ -167,11 +167,9 @@ class CurveSATAdapter:
 
     # для отладки
     def get_model_from_curve(self, curve):
-        raise NotImplementedError
-        for cnum, bm in enumerate(curve.base_maps):
-            if bm is not None:
-                bm_var = self.get_bm_var(cnum, bm)
-                self.append_clause({bm_var: True})
+        for cnum, pnum, sp in curve.sp_info():
+            sp_var = self.get_sp_var(pnum, cnum, sp)
+            self.append_clause({sp_var: True})
 
         if not self.solve():
             raise Exception("Can't get model, no such curve!")
