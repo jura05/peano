@@ -1,16 +1,13 @@
-#!/usr/bin/env python3
-# coding: utf-8
-
 import unittest
 
-import sys
-import os
-sys.path.append(os.path.dirname(sys.argv[0]) + '/..')
-
 import logging
-logging.basicConfig(level=0, stream=sys.stdout)
+import sys
 
 from peano.gen_curve import *
+
+
+logging.basicConfig(level=0, stream=sys.stdout)
+
 
 class TestGen(unittest.TestCase):
     def test_brkline1(self):
@@ -27,6 +24,3 @@ class TestGen(unittest.TestCase):
         gen = CurveGenerator(dim=2, div=5, hdist=2)
         res = list(gen.generate_brklines(start_max_count=1, finish_max_count=10**6))
         assert len(res) == 2592
-
-if __name__ == "__main__":
-    unittest.main()

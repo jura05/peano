@@ -1,24 +1,17 @@
-#!/usr/bin/env python3
-# coding: utf-8
-
 import unittest
-
-# run script from peano directory
-import sys
-import os
-sys.path.append(os.path.dirname(sys.argv[0]) + '/..')
 
 from peano.examples import *
 from peano.sat_adapters import CurveSATAdapter
 
-class TestCurve(unittest.TestCase):
+
+class TestSAT(unittest.TestCase):
     def setUp(self):
         self.curves = [
             get_peano_curve().forget(),
             get_meurthe_curve().forget(),
         ]
 
-    def test_curves(self):
+    def test_sat(self):
         for pcurve in self.curves:
             for curve in pcurve.gen_possible_curves():
                 adapter = CurveSATAdapter(dim=pcurve.dim)
@@ -37,10 +30,3 @@ class TestCurve(unittest.TestCase):
                 print('.', end='', flush=True)
 
             print('*', flush=True)
-
-
-
-
-if __name__ == "__main__":
-    unittest.main()
-

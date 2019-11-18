@@ -1,11 +1,4 @@
-#!/usr/bin/env python3
-# coding: utf-8
-
 import unittest
-
-import sys
-import os
-sys.path.append(os.path.dirname(sys.argv[0]) + '/..')
 
 from peano.fast_fractions import FastFraction
 from peano.examples import *
@@ -140,7 +133,3 @@ class TestCurve(unittest.TestCase):
         ratio = curve.estimate_ratio(utils.ratio_l2_squared, rel_tol_inv=10000, use_vertex_brkline=True, verbose=False)
 
         assert ratio['lo'] == (FastFraction(408, 73)**2)
-
-
-if __name__ == "__main__":
-    unittest.main()
