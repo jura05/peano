@@ -1,5 +1,6 @@
 import operator
 from collections import Counter, namedtuple
+from collections.abc import Sized
 from heapq import heappop, heappush
 import logging
 
@@ -221,7 +222,7 @@ class RichPairsTree:
 
     def add_pair(self, pair, lo, up, priority, data):
         """Add node keeping the invariants."""
-        self.stats['calls'] += 1
+        self.stats['adds'] += 1
 
         # the order of checks may be important; as in current algorithms
         # we add bad pairs to SAT clauses, it may be more effective to
@@ -254,11 +255,18 @@ class RichPairsTree:
 
     def copy(self):
         assert not self.bad_pairs
-        assert self.max_lo_node is None
         assert self.good_threshold is None
         assert self.bad_threshold is None
-        return RichPairsTree(self.new_pairs)
+        new_tree = RichPairsTree([])
+        new_tree.new_pairs = self.new_pairs.copy()
+        new_tree.nodes = self.nodes.copy()
+        new_tree.max_lo_node = self.max_lo_node
+        new_tree._inc = self._inc
+        return new_tree
 
+
+class RunOutOfIterationsException(Exception):
+    pass
 
 class Estimator:
     """
@@ -268,7 +276,7 @@ class Estimator:
     It orchestrates work of helper classes: RichPairsTree, CurveBalancedPairs and others.
     """
 
-    def __init__(self, ratio_func, cache_max_size=2**24):
+    def __init__(self, ratio_func, cache_max_size=2**20):
         """
         Init Estimator instance and set some basic properties.
 
@@ -278,6 +286,7 @@ class Estimator:
         """
 
         self.ratio_func = ratio_func
+        self.stats = Counter()
         self._get_bounds_cache = {}
         self._cache_max_size = cache_max_size
 
@@ -298,9 +307,12 @@ class Estimator:
         if use_cache:
             # do not use caching for brklines, maybe later
             cache = self._get_bounds_cache
-            cache_key = (pair.junc, pos1.cnums, pos1.cubes, pos2.cnums, pos2.cubes)
+            cache_key = (dim, N, pair.junc, pos1.cnums, pos1.cubes, pos2.cnums, pos2.cubes)
             if cache_key in cache:
+                self.stats['get_bounds_cache_hit'] += 1
                 return cache[cache_key]
+            else:
+                self.stats['get_bounds_cache_miss'] += 1
 
         # these are integer positions in original curve patterns
         l1, x1, t1 = pos1.get_int_coords()
@@ -386,7 +398,11 @@ class Estimator:
                         t2_real = FastFraction(t2_point, mt * brk_mt)
                         argmax = {'x1': x1_real, 't1': t1_real, 'x2': x2_real, 't2': t2_real, 'junc': junc}
 
-        if use_cache and len(cache) < self._cache_max_size:
+        if use_cache:
+            if len(cache) == self._cache_max_size:
+                # poor man's LRU cache :(
+                cache.clear()
+                self.stats['get_bounds_cache_cleanup'] += 1
             cache[cache_key] = (lo, up, None)
 
         return lo, up, argmax
@@ -548,6 +564,7 @@ class Estimator:
 
         # this method is simply "bisection" algorithm based on test_ratio_fuzzy
 
+        stats = Counter()
         # start lower bound: it would be profitable to use good theoretical
         # bounds like 5**2 for ratio_l2_squared, dim=2, pattern_count=1 (?)
         if start_lower_bound is None:
@@ -571,9 +588,7 @@ class Estimator:
 
         # invariant: best curve in the class is in [curr_lo, curr_up]
         # curr_curve ratio also in [curr_lo, curr_up]
-
         tolerance = FastFraction(rel_tol_inv + 1, rel_tol_inv)
-        bisect_iter = 0
         while curr_up > curr_lo * tolerance:
             if curr_lo == FastFraction(0, 1):
                 # optimization ?
@@ -582,9 +597,9 @@ class Estimator:
             else:
                 new_lo = FastFraction(2, 3) * curr_lo + FastFraction(1, 3) * curr_up
                 new_up = FastFraction(1, 3) * curr_lo + FastFraction(2, 3) * curr_up
-            bisect_iter += 1
+            stats['bisect_iter'] += 1
             logging.warning(
-                '#%d. best in: [%.5f, %.5f]; seek with thresholds: [%.5f, %.5f]', bisect_iter,
+                '#%d. best in: [%.5f, %.5f]; seek with thresholds: [%.5f, %.5f]', stats['bisect_iter'],
                 curr_lo, curr_up, new_lo, new_up,
             )
             try:
@@ -598,11 +613,12 @@ class Estimator:
                     start_pairs_tree=pairs_tree,
                     verbose=verbose,
                 )
-            except Exception:
+                stats.update(test_result['stats'])
+            except RunOutOfIterationsException:
                 # run out of iterations
                 break
 
-            if test_result:
+            if test_result.get('curve'):
                 curr_curve = test_result['curve']
                 # try to estimate ratio for curr_curve ???
                 curr_up = new_up
@@ -614,9 +630,10 @@ class Estimator:
 
         return {
             'curve': curr_curve,
+            'pairs_tree': pairs_tree,
             'lo': curr_lo,
             'up': curr_up,
-            'stats': {'bisect': bisect_iter},
+            'stats': stats,
         }
 
     def test_ratio_fuzzy(self, curve, bad_threshold, good_threshold,
@@ -625,7 +642,7 @@ class Estimator:
         """
         Test if there is a "good" curve.
 
-        If the method returns False, then ratio is "bad" for all regular curves for given fuzzy curve.
+        If the method returns no curve, then ratio is "bad" for all regular curves for given fuzzy curve.
         If the method returns a curve, then it is good one.
 
         Arguments:
@@ -673,11 +690,14 @@ class Estimator:
         pairs_tree.set_bad_threshold(bad_threshold)
         self.bound_new_pairs(pairs_tree)
 
-        iter_no = 0
+        no_model = None
+        stats = Counter()
+        result = {'stats': stats}
+
         while pairs_tree.nodes:
-            iter_no += 1
-            if max_iter is not None and iter_no > max_iter:
-                raise Exception("Used all iterations, can't test ratio!")
+            stats['divide_iter'] += 1
+            if max_iter is not None and stats['divide_iter'] > max_iter:
+                raise RunOutOfIterationsException()
 
             pairs_tree.divide()
             self.bound_new_pairs(pairs_tree)
@@ -685,33 +705,22 @@ class Estimator:
                 bad_pair = pairs_tree.bad_pairs.pop()
                 adapter.add_forbid_clause(bad_pair.junc, bad_pair.curve)
 
-            if iter_no % sat_pack == 0:
+            if stats['divide_iter'] % sat_pack == 0:
                 if not adapter.solve():
-                    print('no SAT model')
-                    return False
-                if verbose and pairs_tree.nodes:
-                    worst_node = pairs_tree.nodes[0]
-                    worst_pair = worst_node.pair
-                    print({
-                        'iter': iter_no,
-                        'pairs': len(pairs_tree.nodes),
-                        'pairs_tree_stats:': pairs_tree.stats,
-                        'up': float(worst_node.up),
-                        'depth': (worst_pair.pos1.depth, worst_pair.pos2.depth),
-                        'adapter stats': adapter.stats(),
-                    })
+                    no_model = True
+                    break
 
-        if not adapter.solve():
-            print('no SAT model')
-            return False
+        result['stats'].update({'ptree_' + k: v for k, v in pairs_tree.stats.items()})
+        result['stats'].update({'sat_' + k: v for k, v in adapter.stats().items()})
+
+        if no_model or not adapter.solve():
+            return result
 
         print('SAT model exists!')
         model = adapter.get_model()
-        return {
-            "model": model,
-            "curve": adapter.get_curve_from_model(curve, model),
-            "pairs_tree": pairs_tree,
-        }
+        result['model'] = model
+        result['curve'] = adapter.get_curve_from_model(curve, model)
+        return result
 
     def estimate_ratio_sequence(self, curves, rel_tol_inv):
         """
@@ -719,51 +728,63 @@ class Estimator:
 
         This method relies totally on estimate_ratio_fuzzy.
         """
-        curve0 = next(curves[0].gen_possible_curves())
-        curr_lo = FastFraction(0, 1)
-        curr_up = self.estimate_ratio_regular(curve0, rel_tol_inv=rel_tol_inv)['up']
 
-        active = [{'curve': curve, 'lo': None, 'up': None, 'example': None} for curve in curves]
+        CurveItem = namedtuple('CurveItem', ['priority', 'lo', 'up', 'curve', 'example', 'pairs_tree'])
+        _inc = 0
+
+        def get_item(curve, lo=None, up=None, example=None, pairs_tree=None):
+            nonlocal _inc
+            _inc += 1
+            priority = ((-lo if lo is not None else None), _inc)
+            return CurveItem(priority, lo, up, curve, example, pairs_tree)
+
+        curr_lo = FastFraction(0, 1)
+        curr_up = None
+
+        active = (get_item(curve) for curve in curves)
+        if isinstance(curves, Sized):
+            active = list(active)
         curr_rel_tol_inv = 1
         epoch = 0
         stats = Counter()
         tolerance = FastFraction(rel_tol_inv + 1, rel_tol_inv)
-        while curr_up > curr_lo * tolerance:
+        while curr_up is None or curr_up > curr_lo * tolerance:
             curr_rel_tol_inv *= 2
             epoch += 1
-            bounds = {}
-            for cnt, data in enumerate(active):
-                if 'pairs_tree' not in data:
-                    data['pairs_tree'] = self.init_pairs_tree(data['curve'])
-                logging.warning('E%d, curve %d / %d', epoch, cnt + 1, len(active))
+            total = len(active) if isinstance(active, list) else -1
+            new_active = []  # heap of CurveItem
+            for cnt, item in enumerate(active):
+                logging.warning('E%d, curve %d / %d', epoch, cnt + 1, total)
+                if curr_up is None:
+                    curve0 = next(item.curve.gen_possible_curves())
+                    curr_up = self.estimate_ratio_regular(curve0, rel_tol_inv=rel_tol_inv)['up']
+
                 res = self.estimate_ratio_fuzzy(
-                    data['curve'], rel_tol_inv=curr_rel_tol_inv, upper_bound=curr_up,
-                    start_lower_bound=data['lo'], start_upper_bound=data['up'],
-                    start_curve=data['example'], start_pairs_tree=data['pairs_tree'],
+                    item.curve, rel_tol_inv=curr_rel_tol_inv, upper_bound=curr_up,
+                    start_lower_bound=item.lo, start_upper_bound=item.up,
+                    start_curve=item.example, start_pairs_tree=item.pairs_tree,
                 )
                 if res['up'] < curr_up:
                     curr_up = res['up']
                     logging.warning('new upper bound: %.3f', curr_up)
+
+                if res['lo'] <= curr_up:
+                    # have a chance to be the best
+                    new_item = get_item(curve=item.curve, lo=res['lo'], up=res['up'], example=res['curve'], pairs_tree=res['pairs_tree'])
+                    heappush(new_active, new_item)
+                    logging.warning('added new active item!')
+
+                while new_active[0].lo > curr_up:  # priority = -lo
+                    heappop(new_active)
+
+                logging.warning('current active: %d, stats: %s', len(new_active), res['stats'])
                 stats.update(res['stats'])
-                bounds[cnt] = res
 
-            new_active = []
-            new_lo = None
-            for cnt, data in enumerate(active):
-                res = bounds[cnt]
-                if res['lo'] > curr_up:
-                    continue
-                if new_lo is None or res['lo'] < new_lo:
-                    new_lo = res['lo']
-                data['lo'], data['up'] = res['lo'], res['up']
-                data['example'] = res['curve']
-                new_active.append(data)
+            active = sorted(new_active, key=lambda item: item.up)  # better to start with good curves
+            curr_lo = min(item.lo for item in active)
+            logging.warning('current bounds: [%.5f, %.5f]', curr_lo, curr_up)
 
-            active = new_active
-            curr_lo = new_lo
-            logging.warning('current bounds: [%.3f, %.3f]', curr_lo, curr_up)
-
-        return {'lo': curr_lo, 'up': curr_up, 'curves': [d['curve'] for d in active], 'stats': stats}
+        return {'lo': curr_lo, 'up': curr_up, 'curves': [d.curve for d in active], 'stats': stats}
 
 
 class IntegerBrokenLine:

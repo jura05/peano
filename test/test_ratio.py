@@ -7,9 +7,6 @@ from peano.gen_curve import CurveGenerator
 from peano.curves import SymmFuzzyCurve
 from peano.ratio import Estimator
 
-import os
-import psutil
-
 
 class TestCurve(unittest.TestCase):
 
@@ -140,8 +137,5 @@ class TestCurve(unittest.TestCase):
         estimator = Estimator(utils.ratio_l2_squared)
         curve = estimator.estimate_ratio(pcurve, rel_tol_inv=10000, verbose=False)['curve']
         ratio = estimator.estimate_ratio(curve, rel_tol_inv=10000, use_vertex_brkline=True, verbose=False)
-
-        process = psutil.Process(os.getpid())
-        print('RSS', process.memory_info().rss)  # in bytes
 
         assert ratio['lo'] == (FastFraction(408, 73)**2)

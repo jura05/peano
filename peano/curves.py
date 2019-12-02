@@ -724,6 +724,7 @@ class Junction:
         self.spec2 = spec2
         self.delta_x = delta_x
         self.delta_t = delta_t
+        self._hash = hash(self._data())
 
     @classmethod
     def get_junc(cls, spec1, spec2, delta_x):
@@ -754,7 +755,7 @@ class Junction:
         return self._data() == other._data()
 
     def __hash__(self):
-        return hash(self._data())
+        return self._hash
 
     def __repr__(self):
         return '{} | dx={}, dt={} | {}'.format(self.spec1, self.delta_x, self.delta_t, self.spec2)

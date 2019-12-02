@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """
 Benchmark: find best 5*5 curve.
-Run on 2.6Ghz CPU: 3m14s, bisect: 291, get_bounds: 8.8m
+Run on 2.6Ghz CPU: 2m51s, bisect: 291, get_bounds: 8.8m
 """
+
+import os
+import psutil
 
 import sys
 sys.path.append('.')
@@ -19,12 +22,14 @@ logging.basicConfig(level=0, stream=sys.stdout, format='[%(process)d] %(asctime)
 
 def main():
     curve_gen = gen_curve.CurveGenerator(dim=2, div=5, hdist=1, max_cdist=1, verbose=1)
-    pcurves = []
-    for brkline in curve_gen.generate_brklines():
-        pcurves.append(SymmFuzzyCurve.init_from_brkline(2, 5, brkline, allow_time_rev=True))
+    pcurves = (SymmFuzzyCurve.init_from_brkline(2, 5, brkline, allow_time_rev=True) for brkline in curve_gen.generate_brklines())
     estimator = Estimator(ratio_l2_squared)
     res = estimator.estimate_ratio_sequence(pcurves, rel_tol_inv=1000000)
     print(res)
+    print(estimator.stats)
+    process = psutil.Process(os.getpid())
+    print('RSS:', process.memory_info().rss)  # in bytes
+
 
 if __name__ == "__main__":
     main()
