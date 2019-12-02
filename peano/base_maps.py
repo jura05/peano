@@ -1,125 +1,200 @@
-# coding: utf-8
-
-from fractions import Fraction
-import functools
 import itertools
 
 from sympy.combinatorics.permutations import Permutation
 
+from .fast_fractions import FastFraction
+
 
 class BaseMap:
-    """Base map: isometry of cube and (possibly) time reversal.
+    """
+    Base map: isometry of cube and (possibly) time reversal.
+
     Immutable and hashable.
-    Acts on function f:[0,1]->[0,1]^d as  Bf: [0,1]--B_t-->[0,1]--f-->[0,1]^d--B_x-->[0,1]^d
+    Acts on function f:[0,1]->[0,1]^d as  Bf: [0,1]--B_time-->[0,1]--f-->[0,1]^d--B_cube-->[0,1]^d
+
+    We severily use caching, because there are not so many possible base maps.
+    We restrict to dim <= 6, but the limit may by increased.
     """
 
-    def __init__(self, perm, flip, time_rev=False):
-        """Create a BaseMap instance.
-        Params:
-        perm, flip: params, which define isometry of cube
-                      perm = [k_0,...,k_{d-1}]
-                      flip = [b_0,...,b_{d-1}]
-                      define the map
-                      (x_0,...,x_{d-1}) --> (f(b_0;x_{k_0}), ..., f(b_{d-1};x_{k_{d-1}})),
-                      where f(b;x)=x if b is False, and 1-x otherwise
-        time_rev:   time reversal (boolean), default: False
+    basis_letters = 'ijklmn'
+    var_letters = 'xyz'
+
+    _obj_cache = {}
+
+    def __new__(cls, coords, time_rev=False):
         """
+        Create a BaseMap instance.
 
-        self.dim = len(perm)
+        Cached method. 
+        Params:
+            coords:     list of pairs (k, b) defining the isometry
+                        B_cube(x_0,...,x_{d-1}) = (y_0,...,y_{d-1}),
+                        where y_j = x_{k_j} if b_j else 1 - x_{k_j}
 
-        # store data in tuples to make object immutable
-        self.perm = tuple(perm)
-        self.flip = tuple(bool(b) for b in flip)
-        self.time_rev = bool(time_rev)
-        self._data = (self.perm, self.flip, self.time_rev)
-        self._hash = hash(self._data)
+            time_rev:   time reversal (boolean), default: False
+                        B_time(t) = 1-t if time_rev else t
+        """
+        
+        coords = tuple((k, bool(b)) for k, b in coords)
+        time_rev = bool(time_rev)
+
+        cache = cls._obj_cache
+        key = (coords, time_rev)
+        if key in cache:
+            return cache[key]
+
+        obj = super().__new__(cls)
+        obj.dim = len(coords)
+        obj.coords = coords
+        obj.time_rev = time_rev
+        obj._key = key
+        obj._mul_cache = {}
+        obj._inv_cache = None
+
+        cache[key] = obj
+        return obj
 
     @classmethod
     def id_map(cls, dim):
-        perm = range(dim)
-        flip = [False] * dim
-        return cls(perm, flip)
+        """Identity map."""
+        coords = [(k, False) for k in range(dim)]
+        return cls(coords)
+
+    @classmethod
+    def from_basis(cls, basis):
+        """
+        Convenient way to represent a base map.
+
+        basis -- string, e.g., 'Ij', representing images of standard basis e_1, e_2, ...
+            i=e_1, j=e_2, k=e_3, l=e_4, m=e_5, n=e_6...;
+            upper-case letters correspond to negation of vectors: I = -i, J = -j, ...
+            To get time reverse, place '1' at the end of the string, e.g., 'iJ1'
+        """
+
+        if basis[-1] in '01':
+            time_rev = True if basis[-1] == '1' else False
+            basis = basis[:-1]
+        else:
+            time_rev = False
+
+        assert len(basis) <= len(cls.basis_letters)
+
+        l2i = {l: i for i, l in enumerate(cls.basis_letters)}
+        coords = []
+        for l in basis:
+            lk = l.lower()
+            coords.append((l2i[lk], (l != lk)))
+
+        return BaseMap(coords, time_rev)
+
+    def repr_basis(self):
+        """Concise representation of base_map (see from_basis)."""
+        assert self.dim <= len(self.basis_letters)
+        basis = ''
+        for k, b in self.coords:
+            letter = self.basis_letters[k]
+            basis += (letter.upper() if b else letter)
+        if self.time_rev:
+            basis += '1'
+        return basis
 
     def cube_map(self):
-        return type(self)(self.perm, self.flip)
+        """Isometry without time reversal."""
+        return BaseMap(self.coords)
 
     def __eq__(self, other):
-        return self._data == other._data
+        return self._key == other._key
 
     def __hash__(self):
-        return self._hash
+        return hash((self._key))
 
     def __repr__(self):
-        if self.dim > 3:
+        if self.dim > len(self.var_letters):
             letters = ['x_{}'.format(i) for i in range(self.dim)]
         else:
-            letters = "xyz"[:self.dim]
+            letters = self.var_letters[:self.dim]
         s = "(" + ",".join(letters) + ")"
         s += "->("
-        s += ",".join([("1-{}" if b else "{}").format(letters[k]) for k, b in zip(self.perm, self.flip)])
+        s += ",".join([("1-{}" if b else "{}").format(letters[k]) for k, b in self.coords])
         s += ")"
         if self.time_rev:
             s += ",t->1-t"
         return s
 
     def __mul__(self, other):
-        """Composition of base maps."""
+        """
+        Composition of base maps: A * B.
+        """
         if not isinstance(other, BaseMap):
             return NotImplemented
-        assert self.dim == other.dim
-        perm = []
-        flip = []
-        for i in range(self.dim):
-            p = self.perm[i]
-            k = other.perm[p]
-            b1 = self.flip[i]
-            b2 = other.flip[p]
-            perm.append(k)
-            flip.append(b1 ^ b2)
-        time_rev = self.time_rev ^ other.time_rev
-        return type(self)(perm, flip, time_rev)
 
-    def inverse(self):
-        """Inverse of base map."""
-        perm = [None]*self.dim
-        flip = [None]*self.dim
-        for i, k, b in zip(range(self.dim), self.perm, self.flip):
-            perm[k] = i
-            flip[k] = b
-        return type(self)(perm, flip, self.time_rev)
+        key = other._key
+        val = self._mul_cache.get(key, None)
+        if val is None:
+            # actual multiplication
+            assert self.dim == other.dim
+            coords = []
+            for i in range(self.dim):
+                p, b1 = self.coords[i]
+                k, b2 = other.coords[p]
+                coords.append((k, b1 ^ b2))
+            time_rev = self.time_rev ^ other.time_rev
+            val = BaseMap(coords, time_rev)
+            self._mul_cache[key] = val
+        return val
 
     def __invert__(self):
-        return self.inverse()
+        """Inverse of base map: ~B."""
+        val = self._inv_cache
+        if val is None:
+            # actual inversion
+            coords = [None] * self.dim
+            for i, c in enumerate(self.coords):
+                k, b = c
+                coords[k] = (i, b)
+            self._inv_cache = val = BaseMap(coords, self.time_rev)
+        return val
 
-    def reverse_time(self):
-        return type(self)(self.perm, self.flip, not self.time_rev)
+    def reversed_time(self):
+        return BaseMap(self.coords, not self.time_rev)
+
+    def conjugate_by(self, other):
+        """Conjugation."""
+        return other * self * ~other
 
     def is_oriented(self):
         oriented = True
-        for f in self.flip:
-            if f: oriented = not oriented
-        if Permutation(self.perm).signature() == -1:
+        perm = []
+        for k, b in self.coords:
+            if b: oriented = not oriented
+            perm.append(k)
+        if Permutation(perm).signature() == -1:
             oriented = not oriented
         return oriented
 
     def apply_x(self, x, mx=1):
         """Apply isometry to a point x of [0,1]^d."""
-        return tuple(mx-x[k] if b else x[k] for k, b in zip(self.perm, self.flip))
+        return tuple(mx-x[k] if b else x[k] for k, b in self.coords)
+
+    def apply_x_fraction(self, x):
+        """FastFraction version."""
+        x = [FastFraction(xj, 1) if isinstance(xj, int) else xj for xj in x]
+        return tuple(FastFraction(1, 1) - x[k] if b else x[k] for k, b in self.coords)
 
     def apply_t(self, t, mt=1):
         return mt - t if self.time_rev else t
 
     def apply_vec(self, v):
         """Apply linear part of isometry to a vector."""
-        return tuple(-v[k] if b else v[k] for k, b in zip(self.perm, self.flip))
+        return tuple(-v[k] if b else v[k] for k, b in self.coords)
 
     def apply_cube(self, div, cube):
         """Apply isometry to a sub-cube."""
-        return tuple(div-cube[k]-1 if b else cube[k] for k, b in zip(self.perm, self.flip))
+        return tuple(div-cube[k]-1 if b else cube[k] for k, b in self.coords)
 
     def apply_cube_start(self, cube_start, cube_length):
         """Apply isometry to a cube of given length, return it's min (start) vertex."""
-        return tuple(1-cube_start[k]-cube_length if b else cube_start[k] for k, b in zip(self.perm, self.flip))
+        return tuple(1-cube_start[k]-cube_length if b else cube_start[k] for k, b in self.coords)
 
     def apply_edge(self, edge):
         """Apply isometry to an edge. Not implemented!"""
@@ -134,36 +209,54 @@ def gen_base_maps(dim, time_rev=None):
     for perm in itertools.permutations(range(dim)):
         for flip in itertools.product([True, False], repeat=dim):
             for time_rev in time_rev_variants:
-                yield BaseMap(perm, flip, time_rev)
+                yield BaseMap(zip(perm, flip), time_rev)
+
 
 def gen_constraint_cube_maps(dim, points_map):
     for bm in gen_base_maps(dim, time_rev=False):
-        if all(bm.apply_x(src) == dst for src, dst in points_map.items()):
+        if all(bm.apply_x_fraction(src) == dst for src, dst in points_map.items()):
             yield bm
 
 
-# спецификация полифрактальной кривой: изометрии + выбор шаблона
-# образует полугруппу по умножению, действует на полифрактальные кривые
-# BaseMap образует, по сути, подгруппу, не меняя шаблон
 class Spec:
-    """BaseMap + pattern choice."""
-    def __init__(self, base_map, pnum=0):
-        self.base_map = base_map
-        self.pnum = pnum
+    """
+    Specification of poly-fractal curve to a fraction: BaseMap and pattern choice.
 
-    def _data(self):
-        return (self.base_map, self.pnum)
+    Specs act on polyfractal curves and form a semi-group.
+    """
+
+    # we do not make obj_id, to provide consistency for pickling
+    _obj_cache = {}
+
+    def __new__(cls, base_map, pnum=0):
+        key = (base_map._key, pnum)
+        cache = cls._obj_cache
+        if key in cache:
+            return cache[key]
+
+        obj = super().__new__(cls)
+        obj.base_map = base_map
+        obj.pnum = pnum
+        obj._key = key
+        cache[key] = obj
+        return obj
 
     def __eq__(self, other):
-        return self._data() == other._data()
+        return self._key == other._key
 
     def __hash__(self):
-        return hash(self._data())
+        return hash(self._key)
 
     def __repr__(self):
         return '{}[{}]'.format(self.base_map, self.pnum)
 
     def __mul__(self, other):
+        """
+        Composition of specs, i.e., (S1*S2) f = S1(S2 f).
+
+        We also allow to combine specs and base maps,
+        as they act on curves too.
+        """
         if isinstance(other, BaseMap):
             other_bm = other
         elif isinstance(other, Spec):
@@ -173,10 +266,9 @@ class Spec:
         return Spec(self.base_map * other_bm, self.pnum)
 
     def __rmul__(self, other):
-        pnum = self.pnum
         if isinstance(other, BaseMap):
             other_bm = other
-            other_pnum = None
+            pnum = self.pnum
         elif isinstance(other, Spec):
             other_bm = other.base_map
             pnum = other.pnum
@@ -184,5 +276,10 @@ class Spec:
             return NotImplemented
         return Spec(other_bm * self.base_map, pnum)
 
-    def reverse_time(self):
-        return Spec(self.base_map.reverse_time(), self.pnum)
+    def reversed_time(self):
+        return Spec(self.base_map.reversed_time(), self.pnum)
+
+    def conjugate_by(self, other):
+        """Conjugate by base map (not spec!)."""
+        assert isinstance(other, BaseMap)
+        return Spec(self.base_map.conjugate_by(other), self.pnum)

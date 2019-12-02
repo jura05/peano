@@ -1,6 +1,7 @@
 import unittest
 
 from peano.examples import *
+from peano.fast_fractions import FastFraction
 
 
 class TestCommon(unittest.TestCase):
@@ -35,7 +36,7 @@ class TestCommon(unittest.TestCase):
     def test_rrev(self):
         """Double reverse does not change curve."""
         for curve in self.curves:
-            rrcurve = curve.reverse().reverse()
+            rrcurve = curve.reversed().reversed()
             self.assertEqual(curve.proto, rrcurve.proto)
             self.assertEqual(curve.specs, rrcurve.specs)
 
@@ -89,9 +90,6 @@ class TestCurve(unittest.TestCase):
             get_rev_curve(),
             get_rev2_curve(),
             get_rev3_curve(),
-        ]
-        # TODO: unite poly curves with curves
-        self.poly_curves = [
             get_hilbert_bicurve(),
             get_beta_Omega_Curve(),
             #get_ARW_Curve(),
@@ -102,7 +100,7 @@ class TestCurve(unittest.TestCase):
     def test_check(self):
         for curve in self.curves:
             curve.check()
-            curve.reverse().check()
+            curve.reversed().check()
 
     def test_fractions(self):
         for curve in self.curves:
@@ -119,10 +117,27 @@ class TestCurve(unittest.TestCase):
             curve.get_subdivision(2).check()
 
     def test_junc(self):
-        for curve in self.curves + self.poly_curves:
+        for curve in self.curves:
             for jcnt, junc in enumerate(curve.gen_junctions()):
                 if jcnt > 100:
                     raise Exception("Too many juncs!")
+            self.assertEqual(set(curve.gen_junctions()), set(curve.get_junctions_info().keys()))
+
+    def test_vertex_moments(self):
+        known_moments = [
+            {
+                'curve': get_haverkort_curve_A26(),
+                'moments': [FastFraction(k, 28) for k in [0, 5, 9, 12, 16, 19, 23, 28]],
+            },
+            {
+                'curve': get_haverkort_curve_2(),
+                'moments': [FastFraction(k, 28) for k in [1, 6, 8, 13, 15, 20, 22, 27]],
+            },
+        ]
+        for d in known_moments:
+            moments = d['curve'].get_vertex_moments().values()
+            self.assertSetEqual(set(d['moments']), set(moments))
+
 
 
 class TestFuzzyCurves(unittest.TestCase):
@@ -135,6 +150,12 @@ class TestFuzzyCurves(unittest.TestCase):
             get_tokarev_curve(),
             get_rev_curve(),
         ]
+
+    def test_check(self):
+        for curve in [get_hilbert_curve(), get_hilbert_bicurve()]:
+            pcurve = curve.forget(allow_time_rev=True)
+            for c in pcurve.gen_possible_curves():
+                c.check()
 
     def test_junc(self):
         for num, curve in enumerate(self.curves):
@@ -149,7 +170,7 @@ class TestFuzzyCurves(unittest.TestCase):
                     raise Exception("Bad delta!")
 
             for curve in pcurve.gen_possible_curves():
-                juncs = curve.get_junctions()
+                juncs = list(curve.gen_junctions())
                 # проверяем, что для каждого найденного стыка есть порождающая кривая
                 for junc in juncs:
                     if junc not in junc_info:

@@ -1,18 +1,27 @@
 import unittest
 
-from peano.base_maps import BaseMap
+from peano.base_maps import BaseMap, gen_base_maps
 
 
 class TestBaseMap(unittest.TestCase):
+    def setUp(self):
+        self.base_maps = []
+        for dim in range(2, 6):
+            self.base_maps += list(gen_base_maps(dim))
 
     def test_mul(self):
-        bm1 = BaseMap([(0, True), (1, False)])  # (1-x,y)
-        bm2 = BaseMap([(1, False), (0, False)])  # (y,x)
-        self.assertEqual(bm1 * bm2, BaseMap([(1, True), (0, False)]))
-        self.assertEqual(bm2 * bm1, BaseMap([(1, False), (0, True)]))
+        bm1 = BaseMap.from_basis('Ij')
+        bm2 = BaseMap.from_basis('ji')
+        self.assertEqual(bm1 * bm2, BaseMap.from_basis('Ji'))
+        self.assertEqual(bm2 * bm1, BaseMap.from_basis('jI'))
 
     def test_inv(self):
-        bm = BaseMap([(3, True), (2, True), (1, True), (0, True)])
-        self.assertEqual(bm * ~bm, BaseMap.id_map(dim=4))
-        self.assertEqual(~bm * bm, BaseMap.id_map(dim=4))
-        self.assertEqual(bm, bm.reverse_time().reverse_time())
+        for bm in self.base_maps:
+            self.assertEqual(bm * ~bm, BaseMap.id_map(dim=bm.dim))
+            self.assertEqual(~bm * bm, BaseMap.id_map(dim=bm.dim))
+
+    def test_conj(self):
+        dim3 = [bm for bm in self.base_maps if bm.dim == 3]
+        for bm1 in dim3:
+            for bm2 in dim3:
+                self.assertEqual(bm1.conjugate_by(bm2), bm2 * bm1 * ~bm2)

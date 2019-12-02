@@ -1,25 +1,79 @@
 # coding: utf-8
 
+from functools import lru_cache
 import math
 import re
-from fractions import Fraction
 
-from .base_maps import BaseMap, gen_constraint_cube_maps
+from .base_maps import BaseMap
+from .fast_fractions import FastFraction
 
 
 def ratio_linf(d, dv, dt):
-    return (max(abs(x) for x in dv)**d, dt)
+    return FastFraction(max(abs(x) for x in dv)**d, dt)
+
 
 def ratio_l1(d, dv, dt):
-    return (sum(abs(x) for x in dv)**d, dt)
+    return FastFraction(sum(abs(x) for x in dv)**d, dt)
+
 
 def ratio_l2_squared(d, dv, dt):
-    return (sum(x**2 for x in dv)**d, dt**2)
+    return FastFraction(sum(x**2 for x in dv)**d, dt**2)
+
+
+@lru_cache(maxsize=2**20)
+def get_int_cube_with_cache(dim, N, cubes):
+    """Integer coordinates for sequence of embedded cubes."""
+    x = [0] * dim
+    Npower = 1
+    for cube in reversed(cubes):
+        for j in range(dim):
+            x[j] += cube[j] * Npower
+        Npower *= N
+    return x
+
+
+@lru_cache(maxsize=2**20)
+def get_int_time_with_cache(dim, N, cnums):
+    """Integer time for sequence of cnums of embedded cubes."""
+    G = N**dim
+    # multiply by G**l, l = len(cnums), i.e. depth
+    # t = c0/G + c1/G**2 + ... = (c_{l-1} + c_{l-2}*G + ..) / G^l
+    t = 0
+    Gpower = 1
+    for cnum in reversed(cnums):
+        t += cnum * Gpower
+        Gpower *= G
+    return t
+
+
+def get_periodic_sum(start, period, d):
+    """
+    Sum the non-periodic and periodic parts.
+
+    The sum is:
+    s_0/d + s_1/d^2 + ... + s_{k-1}/d^k (non-periodic part = start) +
+       + s_k/d^{k+1} + ... + s_{k+m-1}/d^{k+m} + ... (periodic part = period)
+    """
+    n0 = 0
+    d_power = 1
+    for x in reversed(start):
+        n0 += x * d_power
+        d_power *= d
+    t0 = FastFraction(n0, d_power)
+
+    np = 0
+    dp_power = 1
+    for x in reversed(period):
+        np += x * dp_power
+        dp_power *= d
+    tp = FastFraction(np, d_power*(dp_power - 1))
+
+    return t0 + tp
+
 
 
 def chain2proto(chain_code):
     """Convert chain code like 'ijK' to curve prototype."""
-    
     dim = len(set(''.join(chain_code).lower()))
 
     assert dim <= 6
@@ -45,26 +99,6 @@ def chain2proto(chain_code):
 
     return proto
 
-def basis2base_map(basis):
-    
-    dim = len(basis)-1 if basis[-1] in ['0','1'] else len(basis)
-    
-    letters = 'ijklmn'
-    assert dim <= 6
-
-    l2i = {l: i for i, l in enumerate(letters)}
-    perm = [None]*dim
-    flip = [None]*dim
-    time_rev = True if basis[-1] =='1' else False
-    
-    basis = basis[:-1] if basis[-1] in ['0','1'] else basis
-
-    for k, l in enumerate(basis):
-        lk = l.lower()
-        perm[k] = l2i[lk]
-        flip[k] = (l != lk)
-
-    return BaseMap(perm, flip, time_rev)
 
 def bmstr2base_map(bmstr):
     if '1-t' in bmstr:
@@ -84,9 +118,7 @@ def bmstr2base_map(bmstr):
     flip[0] = ('1-' in g1)
     flip[1] = ('1-' in g2)
     
-    return BaseMap(perm, flip, time_rev)
-
-
+    return BaseMap(zip(perm, flip), time_rev)
 
 
 def get_lcm(iterable):

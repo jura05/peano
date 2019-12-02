@@ -33,38 +33,6 @@ ratio = ratio_l2
 
 
 
-def get_pcurve_for_brkline(dim, div, brkline, allow_time_rev):
-    proto = [brk[0] for brk in brkline]
-
-    cube_first, entr_first, _ = brkline[0]
-    entr = tuple(Fraction(cj + ej, div) for cj, ej in zip(cube_first, entr_first))
-
-    cube_last, _, exit_last = brkline[-1]
-    exit = tuple(Fraction(cj + ej, div) for cj, ej in zip(cube_last, exit_last))
-
-    symmetries = []
-    for bm in gen_constraint_cube_maps(dim, {entr: entr, exit: exit}):
-        symmetries.append(bm)
-    if allow_time_rev:
-        for bm in gen_constraint_cube_maps(dim, {entr: exit, exit: entr}):
-            symmetries.append(bm.reverse_time())
-
-    base_maps = [None] * len(proto)
-    repr_maps = [None] * len(proto)
-
-    for cnum, brk in enumerate(brkline):
-        cube, rel_entr, rel_exit = brk
-        for bm in gen_constraint_cube_maps(dim, {entr: rel_entr, exit: rel_exit}):
-            repr_maps[cnum] = bm
-            break
-
-    return PartialFractalCurve(
-        dim=dim, div=div,
-        proto=proto,
-        base_maps=base_maps,
-        repr_maps=repr_maps,
-        symmetries=symmetries,
-    )
 
 def perebor(conf):
     curve_gen = CurveGenerator(dim=conf['dim'], div=conf['div'], hdist=conf['hdist'], max_cdist=conf['max_cdist'], verbose=1)
@@ -76,8 +44,11 @@ def perebor(conf):
     for it, brkline in enumerate(brklines):
         print('ITER:', it, stats)
         pcurve = get_pcurve_for_brkline(conf['dim'], conf['div'], brkline, allow_time_rev=conf['allow_time_rev'])
+
+        pcurve = SymmFuzzyCurve.init_from_brkline(2, 5, brklines[48], allow_time_rev=True)
+
         has_good = pcurve.estimate_ratio(
-            ratio_l2,
+            utils.ratio_l1,
             lower_bound=conf['lower_bound'],
             upper_bound=conf['upper_bound'],
             sat_pack=conf['sat_pack'],
@@ -89,7 +60,9 @@ def perebor(conf):
         else:
             stats['not_found'] += 1
         if conf.get('max_iter') and it >= conf['max_iter']: break
+
     print(stats)
+
 
 def clever_perebor(conf):
     curve_gen = CurveGenerator(dim=conf['dim'], div=conf['div'], hdist=conf['hdist'], max_cdist=conf['max_cdist'], verbose=1)
@@ -161,54 +134,7 @@ def triple_perebor(conf):
         if it + 1 != 49:
             continue
 
-        # начинается поиск!
-        curr_lo = 0
-        curr_up = apriori_up
-        # инвариант: лучшая кривая в данном классе лежит в [curr_lo, curr_up]
-
-        # делаем bisect для поиска хорошей кривой
-        while curr_up * (1 - conf['rel_tol']) > curr_lo:
-            new_lo = 2/3 * curr_lo + 1/3 * curr_up
-            new_up = 1/3 * curr_lo + 2/3 * curr_up
-            print('best in ', curr_lo, curr_up, 'seek with thresholds:', new_lo, new_up)
-            has_good = pcurve.estimate_ratio(
-                ratio_func,
-                lower_bound=new_lo,
-                upper_bound=new_up,
-                sat_pack=conf['sat_pack'],
-                find_model=False,
-                verbose=True,
-            )
-            if has_good:
-                curr_up = new_up
-            else:
-                curr_lo = new_lo
-
-            if curr_up < best_up:
-                print('NEW BEST UP:', curr_up)
-                best_up = curr_up
-
-            if curr_lo > best_up:
-                print('NO CHANCES!')
-                break
-
-        print('ratio in:', curr_lo, curr_up)
-        data = pcurve.estimate_ratio(
-            ratio_func,
-            lower_bound=best_up * 1.0001,
-            upper_bound=best_up * 1.0002,
-            sat_pack=conf['sat_pack'],
-            find_model=True,
-            verbose=True,
-        )
-        curve = data['curve']
-        pickle.dump(curve, open('best_curve.pickle', 'wb'))
-        res = curve.estimate_ratio_new(ratio_l2, rel_tol=0.000001)
-        print(res)
-        print(curve.proto)
-        print(curve.base_maps)
-
-    print('BEST UP:', best_up)
+        pcurve.estimate_ratio(ratio_func, rel_tol_inv=int(1 / conf['rel_tol']), sat_pack=conf['sat_pack'])
 
 
 def pristalno2():
@@ -227,7 +153,7 @@ def pristalno2():
         find_model=True,
         verbose=True,
     )
-    res2 = res1['curve'].estimate_ratio_new(ratio_l2, rel_tol=0.00001)
+    res2 = res1['curve'].estimate_ratio(ratio_l2, rel_tol=0.00001)
     allres = {
         "model": res1["model"],
         "curve": res1["curve"],
@@ -261,7 +187,7 @@ def pristalno():
     print('entr:', curve.get_entrance())
     print('exit:', curve.get_exit())
 
-    curve.estimate_ratio_new(ratio_l2, rel_tol=0.001, max_iter=1000)
+    curve.estimate_ratio(ratio_l2, rel_tol=0.001, max_iter=1000)
 
     pcurve = curve.forget()
     pcurve.allow_time_rev = True
@@ -275,15 +201,15 @@ def pristalno():
 def test_perebor():
     conf = {
         'dim': 2,
-        'div': 5,
-        'hdist': 2,
-        'max_cdist': 1,
+        'div': 3,
+        'hdist': 1,
+        'max_cdist': 2,
         'lower_bound': 40,
         'upper_bound': 60,
         'sat_pack': 10,
         'allow_time_rev': True,
         'find_model': True,
-        'max_iter': 50,
+        'max_iter': 1000,
     }
     perebor(conf)
 
@@ -359,19 +285,7 @@ def timings4():
     perebor(conf)
 
 if __name__ == "__main__":
-    conf = {
-        'dim': 2,
-        'div': 5,
-        'hdist': 1,
-        'max_cdist': 1,
-        'rel_tol': 0.00001,
-        'sat_pack': 100,
-        'allow_time_rev': True,
-    }
-    curve = get_bauman_curve()
-    print(curve.estimate_ratio_new(ratio_l2, rel_tol=0.0001))
-
-    #test_perebor()
+    test_perebor()
     #triple_perebor(conf),
     #timings4()
     #perebor(conf)

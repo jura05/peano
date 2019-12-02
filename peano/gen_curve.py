@@ -8,6 +8,7 @@ import itertools
 
 from . import base_maps
 from .curves import Curve
+from .fast_fractions import FastFraction
 
 
 # head - квадрат конца пути
@@ -292,12 +293,16 @@ class CurveGenerator:
         global_exit = self.exit
         bms_variants = []
         proto = []
+
+        def conv(vec):
+            return tuple(FastFraction.convert(vj) for vj in vec)
+
         for cube, entrance, exit in brkline:
             constr = {
-                global_entrance: entrance,
-                global_exit: exit,
+                conv(global_entrance): conv(entrance),
+                conv(global_exit): conv(exit),
             }
-            bms_for_cube = base_map.gen_constraint_base_maps(self.dim, constr)
+            bms_for_cube = base_maps.gen_constraint_cube_maps(self.dim, constr)
             if self.oriented:
                 bms_for_cube = (bm for bm in bms_for_cube if bm.is_oriented())
             bms_variants.append(bms_for_cube)

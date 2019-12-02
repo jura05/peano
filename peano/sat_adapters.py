@@ -1,65 +1,82 @@
-import logging
 import itertools
 
 from pysat.solvers import *
 
-from . import curves
-from .base_maps import gen_base_maps
-from .common import Junction
+from .curves import Curve
 
-# clause = {var: True|False}
-# var - hashable, в числа переводится непосредственно перед вызовом солвера
-# token - пара (var, True|False), предполагаем что каждый sp задаётся токеном
+
 class CurveSATAdapter:
+    """
+    Class-interface between curves and SAT-solvers.
+
+    We maintain boolean CNF formulas, each clause (disjunction) is represented by dict {var: True|False}
+    var is a hashable object, there are several types of variables:
+    - sp_var: a variable for each variant of (pnum, cnum, spec)
+    - junc_var: a variable for each junction
+    - curve_var: variables for some fuzzy curves (internal)
+    """
+
     def __init__(self, dim):
         self.dim = dim
         self.int_clauses = []
-        self.curve_vars = set()  # переменные кривых, условия для которых уже записаны
+        self.curve_vars = set()  # just cache (?)
         self.var_no = {}
+        self.solver = None  # init at solve
 
-    def get_sp_var(self, pnum, cnum, sp):
-        return ('spec', pnum, cnum, sp)
+    @staticmethod
+    def get_sp_var(pnum, cnum, sp):
+        """sp_var: var=True <=> curve has given spec at given pnum, cnum."""
+        return 'spec', pnum, cnum, sp
 
-    def get_junc_var(self, junc):
-        return ('junc', junc)
+    @staticmethod
+    def get_junc_var(junc):
+        """See make_junc_var."""
+        return 'junc', junc
 
-    # добавляем условие, что истинна ровно одна из переменных
-    # (var1 or var2 or ... or varN) and (!var_i or !var_j)
-    # здесь есть возможность использовать add_atmost
     def make_only(self, only_vars):
+        """
+        Add clauses that one and only one var is True.
+
+        (var1 or var2 or ... or varN) and (!var_i or !var_j)
+        N.B. try to use add_atmost
+        """
         self.append_clause({var: True for var in only_vars})
         for var_pair in itertools.combinations(only_vars, 2):
             self.append_clause({var_pair[0]: False, var_pair[1]: False})
 
-    # инициализация условий для заданной Partial-кривой
     def init_curve(self, curve):
-        # возможные base_map-ы:
+        """Init basic vars and clauses for given fuzzy curve."""
+
+        # possible specs
         for pnum in range(curve.pattern_count):
             for cnum in range(curve.genus):
                 self.make_only([self.get_sp_var(pnum, cnum, sp) for sp in curve.gen_allowed_specs(pnum, cnum)])
 
-        # автостыки - есть у каждой кривой
+        # auto-junction - in each curve
         for junc in curve.gen_auto_junctions():
             self.append_clause({self.get_junc_var(junc): True})
 
-        # стыки
+        # regular junctions
         for junc, curves in curve.get_junctions_info().items():
             self.make_junc_var(junc, curves)
-
 
     # создать переменную Z, такую что Z=True <=> кривая согласуется с данной
     # добавляем условия эквивалентности
     def make_curve_var(self, curve):
+        """Create variable Z, such that Z=True <=> the other curve is consistent with given one."""
         curve_info = tuple(curve.sp_info())
         Z = ('curve', curve_info)
         if Z in self.curve_vars:
-            return Z
+            return Z  # already initiated
+
         # Z <-> curve  <=>  (Z->curve) and (curve->Z)
-        # Z->curve  <=>  !Z or curve  <=>  (!Z or bm1) and (!Z or bm2) and ... (!Z or bmk)
+        # curve <=> (sp1 and sp2 ... and spk)
+
+        # Z->curve  <=>  !Z or curve  <=>  (!Z or sp1) and (!Z or sp2) and ... (!Z or spk)
         for pnum, cnum, sp in curve_info:
             self.append_clause({Z: False, self.get_sp_var(pnum, cnum, sp): True})
 
-        # curve->Z  <=>  !curve or Z  <=>  !bm1 or !bm2 or ... or !bmk or Z
+        # curve->Z  <=>  !curve or Z  <=>  !sp1 or !sp2 or ... or !spk or Z
         clause_rev = {self.get_sp_var(pnum, cnum, sp): False for pnum, cnum, sp in curve_info}
         clause_rev[Z] = True
         self.append_clause(clause_rev)
@@ -70,6 +87,11 @@ class CurveSATAdapter:
     # создать переменную J, такую что J=True <=> в кривой есть стык J
     # методу нужно передать стык и список кривых, в которых он возникает
     def make_junc_var(self, junc, curves):
+        """
+        Create variable J, such that J=True <=> curve hash junction J
+
+        curves is the list of minimal fuzzy curves with this junc (see get_junctions_info)
+        """
         J = self.get_junc_var(junc)
 
         curve_vars = [self.make_curve_var(curve) for curve in curves]
@@ -80,7 +102,8 @@ class CurveSATAdapter:
         clause[J] = False
         self.append_clause(clause)
 
-        # (c1 or c2 .. or ck)->J  <=>  !(c1 or .. or ck) or J  <=>  (!c1 and ... !ck) or J  <=> (!c1 or J) and ... (!ck or J)
+        # (c1 or c2 .. or ck)->J  <=>  !(c1 or .. or ck) or J  <=>  (!c1 and ... !ck) or J
+        #                         <=>  (!c1 or J) and ... (!ck or J)
         for cv in curve_vars:
             self.append_clause({cv: False, J: True})
 
@@ -93,8 +116,8 @@ class CurveSATAdapter:
         clause[junc_var] = False
         self.append_clause(clause)
 
-    # переводим var в натуральные числа здесь
     def append_clause(self, clause):
+        """Add clause to CNF, maintain int representation."""
         int_clause = []
         for var, val in clause.items():
             if var not in self.var_no:
@@ -133,10 +156,10 @@ class CurveSATAdapter:
         return model
 
     def get_curve_from_model(self, curve, model):
-        base_maps = []
         allowed_by_model_variants = []
+        G = curve.genus
         for pnum in range(curve.pattern_count):
-            for cnum in range(curve.genus):
+            for cnum in range(G):
                 allowed_by_model = []
                 for sp in curve.gen_allowed_specs(pnum, cnum):
                     sp_var = self.get_sp_var(pnum, cnum, sp)
@@ -147,12 +170,12 @@ class CurveSATAdapter:
                 allowed_by_model_variants.append(allowed_by_model)
 
         for all_specs in itertools.product(*allowed_by_model_variants):
-            # опять надо нарезать по pnum :( 
+            # compare with gen_possible_curves
             patterns = []
             for pnum, pattern in enumerate(curve.patterns):
-                specs = all_specs[pnum * curve.genus : (pnum + 1) * curve.genus]
+                specs = all_specs[pnum * G : (pnum + 1) * G]
                 patterns.append((pattern.proto, specs))
-            full_curve = curves.Curve(dim=curve.dim, div=curve.div, patterns=patterns)
+            full_curve = Curve(dim=curve.dim, div=curve.div, patterns=patterns)
             has_bad_juncs = False
             for junc in full_curve.gen_junctions():
                 junc_var = self.get_junc_var(junc)
@@ -165,7 +188,7 @@ class CurveSATAdapter:
             if not has_bad_juncs:
                 return full_curve
 
-    # для отладки
+    # debug (?)
     def get_model_from_curve(self, curve):
         for pnum, cnum, sp in curve.sp_info():
             sp_var = self.get_sp_var(pnum, cnum, sp)

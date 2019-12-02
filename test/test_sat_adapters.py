@@ -17,7 +17,7 @@ class TestSAT(unittest.TestCase):
                 adapter = CurveSATAdapter(dim=pcurve.dim)
                 adapter.init_curve(pcurve)
                 model = adapter.get_model_from_curve(curve)
-                juncs = curve.get_junctions()
+                juncs = list(curve.gen_junctions())
                 for junc in juncs:
                     junc_var = adapter.get_junc_var(junc)
                     if not model[junc_var]:

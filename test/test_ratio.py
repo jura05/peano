@@ -4,10 +4,15 @@ from peano.fast_fractions import FastFraction
 from peano.examples import *
 from peano import utils
 from peano.gen_curve import CurveGenerator
-from peano.fuzzy_curves import SymmFuzzyCurve
+from peano.curves import SymmFuzzyCurve
+from peano.ratio import Estimator
+
+import os
+import psutil
 
 
 class TestCurve(unittest.TestCase):
+
     def test_curve_ratio(self):
         known_bounds = [
             {
@@ -57,7 +62,9 @@ class TestCurve(unittest.TestCase):
         ]
         for data in known_bounds:
             curve = data['curve']
-            for metric, ratio in data['ratio'].items():
+            ratio_dict = data['ratio']
+            for metric in sorted(ratio_dict.keys()):
+                ratio = ratio_dict[metric]
                 if isinstance(ratio, list):
                     ratio_lo, ratio_up = ratio
                 else:
@@ -72,7 +79,8 @@ class TestCurve(unittest.TestCase):
                 elif metric == 'linf':
                     func = utils.ratio_linf
 
-                res = curve.estimate_ratio(func, rel_tol_inv=10**4)
+                res = Estimator(func).estimate_ratio(curve, rel_tol_inv=10**5, verbose=False)
+                print(res)
                 assert float(res['up']) <= ratio_up, 'metric {} up failed: {} > {}'.format(metric, res['up'], ratio_up)
                 assert float(res['lo']) >= ratio_lo, 'metric {} lo failed: {} < {}'.format(metric, res['lo'], ratio_lo)
 
@@ -104,13 +112,13 @@ class TestCurve(unittest.TestCase):
                 elif metric == 'linf':
                     func = utils.ratio_linf
 
-                res = curve.estimate_ratio(func, rel_tol_inv=10**4)
+                res = Estimator(func).estimate_ratio(curve, rel_tol_inv=10**4)
                 assert float(res['up']) <= ratio_up, 'metric {} up failed: {} > {}'.format(metric, res['up'], ratio_up)
                 assert float(res['lo']) >= ratio_lo, 'metric {} lo failed: {} < {}'.format(metric, res['lo'], ratio_lo)
 
-    def test_pcurve_ratio(self):
-        pcurve = get_peano5_curve().forget(allow_time_rev=True)
-        assert pcurve.test_ratio(utils.ratio_l2_squared, lower_bound=FastFraction(90, 1), upper_bound=FastFraction(100, 1))
+    #def test_pcurve_ratio(self):
+    #    pcurve = get_peano5_curve().forget(allow_time_rev=True)
+    #    assert pcurve.test_ratio(utils.ratio_l2_squared, lower_bound=FastFraction(90, 1), upper_bound=FastFraction(100, 1))
 
     def test_55_ratio(self):
         good_proto = [
@@ -129,7 +137,11 @@ class TestCurve(unittest.TestCase):
                 break
 
         pcurve = SymmFuzzyCurve.init_from_brkline(2, 5, brk0, allow_time_rev=True)
-        curve = pcurve.estimate_ratio(utils.ratio_l2_squared, rel_tol_inv=10000, find_model=True)['curve']
-        ratio = curve.estimate_ratio(utils.ratio_l2_squared, rel_tol_inv=10000, use_vertex_brkline=True, verbose=False)
+        estimator = Estimator(utils.ratio_l2_squared)
+        curve = estimator.estimate_ratio(pcurve, rel_tol_inv=10000, verbose=False)['curve']
+        ratio = estimator.estimate_ratio(curve, rel_tol_inv=10000, use_vertex_brkline=True, verbose=False)
+
+        process = psutil.Process(os.getpid())
+        print('RSS', process.memory_info().rss)  # in bytes
 
         assert ratio['lo'] == (FastFraction(408, 73)**2)
