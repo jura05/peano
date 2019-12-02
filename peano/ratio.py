@@ -30,8 +30,8 @@ class CurvePiecePosition:
         """
         self.dim = dim
         self.div = div
-        self.cnums = cnums
-        self.cubes = cubes
+        self.cnums = tuple(cnums)
+        self.cubes = tuple(cubes)
 
         self.depth = len(self.cnums)
         self.sub_div = div**self.depth
@@ -42,8 +42,8 @@ class CurvePiecePosition:
         return type(self)(
             dim=self.dim,
             div=self.div,
-            cnums=self.cnums + [cnum],
-            cubes=self.cubes + [cube],
+            cnums=self.cnums + (cnum,),
+            cubes=self.cubes + (cube,),
         )
 
     def get_int_coords(self):
@@ -58,8 +58,8 @@ class CurvePiecePosition:
         """
         return (
             self.depth,
-            get_int_cube_with_cache(self.dim, self.div, tuple(self.cubes)),
-            get_int_time_with_cache(self.dim, self.div, tuple(self.cnums)),
+            get_int_cube_with_cache(self.dim, self.div, self.cubes),
+            get_int_time_with_cache(self.dim, self.div, self.cnums),
         )
 
 
@@ -148,105 +148,6 @@ class CurvePieceBalancedPair:
         else:
             for subpiece in self.piece1.divide():
                 yield type(self)(subpiece.curve, self.junc, subpiece.pos, self.pos2)
-
-    def get_bounds(self, ratio_func, brkline=None):
-        """
-        Get lower and upper bounds for max ratio of given fractions pair.
-
-        brkline  --  instance of IntegerBrokenLine class
-        Return triple (lo, up, argmax), argmax only for brkline
-        """
-        dim = self.curve.dim
-        N = self.curve.div
-        G = self.curve.genus
-
-        pos1, pos2 = self.pos1, self.pos2
-
-        # these are integer positions in original curve patterns
-        l1, x1, t1 = pos1.get_int_coords()
-        l2, x2, t2 = pos2.get_int_coords()
-
-        use_brkline = (brkline is not None)
-        if use_brkline:
-            # ломаные нужно поворачивать:(
-            brk1_bm = self.piece1.get_last_map()
-            brk2_bm = self.piece2.get_last_map()
-
-        junc = self.junc
-
-        # junc: apply base_maps to coordinates
-        x1 = junc.spec1.base_map.apply_cube(pos1.sub_div, x1)
-        t1 = junc.spec1.base_map.apply_cnum(pos1.sub_genus, t1)
-        if use_brkline: brk1_bm = junc.spec1.base_map * brk1_bm
-
-        x2 = junc.spec2.base_map.apply_cube(pos2.sub_div, x2)
-        t2 = junc.spec2.base_map.apply_cnum(pos2.sub_genus, t2)
-        if use_brkline: brk2_bm = junc.spec2.base_map * brk2_bm
-
-        # common scale
-        if l1 == l2:
-            mx2 = mt2 = 1
-        elif l1 == l2 + 1:
-            x2 = [x2j * N for x2j in x2]
-            t2 *= G
-            mx2 = N
-            mt2 = G
-        else:
-            raise Exception("Bad coordinates!")
-
-        mx = pos1.sub_div
-        mt = pos1.sub_genus
-
-        # now we have the following integer coordinates:
-        # cube1: x1j <= xj <= x1j + 1    -- cube inside [0, mx]^d
-        # cube2: x2j <= xj <= x2j + mx2  -- cube inside [0, mx2 * mx]^d, + shift junc_dx * mx
-        #
-        # time1: t1 <= t <= t1 + 1
-        # time2: t2 <= t <= t2 + mt2,  after shift: t2 + junc_dt * mt <= t <= t2 + mt2 + junc_dt * mt
-
-        # junc: shifts
-        t2 += junc.delta_t * mt
-        x2 = [x2j + junc_dxj * mx for x2j, junc_dxj in zip(x2, junc.delta_x)]
-
-        max_dx = [max(abs(x1j - x2j + 1), abs(x1j - x2j - mx2)) for x1j, x2j in zip(x1, x2)]
-
-        max_dt = t2 + mt2 - t1  # max(t_2 - t_1)
-        min_dt = t2 - (t1 + 1)  # min(t_2 - t_1)
-
-        lo = ratio_func(dim, max_dx, max_dt)
-        up = ratio_func(dim, max_dx, min_dt)
-
-        argmax = None
-        if use_brkline:
-            brk_mx = brkline.mx
-            brk_mt = brkline.mt
-            brkline1 = [(brk1_bm.apply_x(x, mx=brk_mx), brk1_bm.apply_t(t, mt=brk_mt)) for x, t in brkline.points]
-            brkline2 = [(brk2_bm.apply_x(x, mx=brk_mx), brk2_bm.apply_t(t, mt=brk_mt)) for x, t in brkline.points]
-
-            t1 *= brk_mt
-            t2 *= brk_mt
-            x1 = [xj * brk_mx for xj in x1]
-            x2 = [xj * brk_mx for xj in x2]
-            for x1rel, t1rel in brkline1:
-                t1_point = t1 + t1rel
-                x1_point = [x1j + x1relj for x1j, x1relj in zip(x1, x1rel)]
-                for x2rel, t2rel in brkline2:
-                    t2_point = t2 + t2rel * mt2
-                    x2_point = [x2j + x2relj * mx2 for x2j, x2relj in zip(x2, x2rel)]
-
-                    dx = [x1j - x2j for x1j, x2j in zip(x1_point, x2_point)]
-                    dt = t2_point - t1_point
-
-                    lo_point = ratio_func(dim, dx, dt)
-                    if lo_point > lo:
-                        lo = lo_point
-                        x1_real = [FastFraction(x1j, mx * brk_mx) for x1j in x1_point]
-                        x2_real = [FastFraction(x2j, mx * brk_mx) for x2j in x2_point]
-                        t1_real = FastFraction(t1_point, mt * brk_mt)
-                        t2_real = FastFraction(t2_point, mt * brk_mt)
-                        argmax = {'x1': x1_real, 't1': t1_real, 'x2': x2_real, 't2': t2_real, 'junc': junc}
-
-        return lo, up, argmax
 
 
 class Threshold:
@@ -351,6 +252,13 @@ class RichPairsTree:
             worst_node = heappop(self.nodes)
             self.new_pairs += worst_node.pair.divide()
 
+    def copy(self):
+        assert not self.bad_pairs
+        assert self.max_lo_node is None
+        assert self.good_threshold is None
+        assert self.bad_threshold is None
+        return RichPairsTree(self.new_pairs)
+
 
 class Estimator:
     """
@@ -360,15 +268,128 @@ class Estimator:
     It orchestrates work of helper classes: RichPairsTree, CurveBalancedPairs and others.
     """
 
-    def __init__(self, ratio_func):
+    def __init__(self, ratio_func, cache_max_size=2**24):
         """
         Init Estimator instance and set some basic properties.
 
         Params:
         ratio_func  --  function (dim, dx, dt) -> FastFraction, it is assumed to be d-uniform
+        cache_max_size  --  subj for pairs bounds cache
         """
 
         self.ratio_func = ratio_func
+        self._get_bounds_cache = {}
+        self._cache_max_size = cache_max_size
+
+    def get_bounds(self, pair, brkline=None):
+        """
+        Get lower and upper bounds for max ratio of given fractions pair.
+
+        brkline  --  instance of IntegerBrokenLine class
+        Return triple (lo, up, argmax), argmax only for brkline
+        """
+        dim = pair.curve.dim
+        N = pair.curve.div
+        G = pair.curve.genus
+
+        pos1, pos2 = pair.pos1, pair.pos2
+
+        use_cache = (brkline is None)
+        if use_cache:
+            # do not use caching for brklines, maybe later
+            cache = self._get_bounds_cache
+            cache_key = (pair.junc, pos1.cnums, pos1.cubes, pos2.cnums, pos2.cubes)
+            if cache_key in cache:
+                return cache[cache_key]
+
+        # these are integer positions in original curve patterns
+        l1, x1, t1 = pos1.get_int_coords()
+        l2, x2, t2 = pos2.get_int_coords()
+
+        use_brkline = (brkline is not None)
+        if use_brkline:
+            # ломаные нужно поворачивать:(
+            brk1_bm = pair.piece1.get_last_map()
+            brk2_bm = pair.piece2.get_last_map()
+
+        junc = pair.junc
+
+        # junc: apply base_maps to coordinates
+        x1 = junc.spec1.base_map.apply_cube(pos1.sub_div, x1)
+        t1 = junc.spec1.base_map.apply_cnum(pos1.sub_genus, t1)
+        if use_brkline: brk1_bm = junc.spec1.base_map * brk1_bm
+
+        x2 = junc.spec2.base_map.apply_cube(pos2.sub_div, x2)
+        t2 = junc.spec2.base_map.apply_cnum(pos2.sub_genus, t2)
+        if use_brkline: brk2_bm = junc.spec2.base_map * brk2_bm
+
+        # common scale
+        if l1 == l2:
+            mx2 = mt2 = 1
+        elif l1 == l2 + 1:
+            x2 = [x2j * N for x2j in x2]
+            t2 *= G
+            mx2 = N
+            mt2 = G
+        else:
+            raise Exception("Bad coordinates!")
+
+        mx = pos1.sub_div
+        mt = pos1.sub_genus
+
+        # now we have the following integer coordinates:
+        # cube1: x1j <= xj <= x1j + 1    -- cube inside [0, mx]^d
+        # cube2: x2j <= xj <= x2j + mx2  -- cube inside [0, mx2 * mx]^d, + shift junc_dx * mx
+        #
+        # time1: t1 <= t <= t1 + 1
+        # time2: t2 <= t <= t2 + mt2,  after shift: t2 + junc_dt * mt <= t <= t2 + mt2 + junc_dt * mt
+
+        # junc: shifts
+        t2 += junc.delta_t * mt
+        x2 = [x2j + junc_dxj * mx for x2j, junc_dxj in zip(x2, junc.delta_x)]
+
+        max_dx = [max(abs(x1j - x2j + 1), abs(x1j - x2j - mx2)) for x1j, x2j in zip(x1, x2)]
+
+        max_dt = t2 + mt2 - t1  # max(t_2 - t_1)
+        min_dt = t2 - (t1 + 1)  # min(t_2 - t_1)
+
+        lo = self.ratio_func(dim, max_dx, max_dt)
+        up = self.ratio_func(dim, max_dx, min_dt)
+
+        argmax = None
+        if use_brkline:
+            brk_mx = brkline.mx
+            brk_mt = brkline.mt
+            brkline1 = [(brk1_bm.apply_x(x, mx=brk_mx), brk1_bm.apply_t(t, mt=brk_mt)) for x, t in brkline.points]
+            brkline2 = [(brk2_bm.apply_x(x, mx=brk_mx), brk2_bm.apply_t(t, mt=brk_mt)) for x, t in brkline.points]
+
+            t1 *= brk_mt
+            t2 *= brk_mt
+            x1 = [xj * brk_mx for xj in x1]
+            x2 = [xj * brk_mx for xj in x2]
+            for x1rel, t1rel in brkline1:
+                t1_point = t1 + t1rel
+                x1_point = [x1j + x1relj for x1j, x1relj in zip(x1, x1rel)]
+                for x2rel, t2rel in brkline2:
+                    t2_point = t2 + t2rel * mt2
+                    x2_point = [x2j + x2relj * mx2 for x2j, x2relj in zip(x2, x2rel)]
+
+                    dx = [x1j - x2j for x1j, x2j in zip(x1_point, x2_point)]
+                    dt = t2_point - t1_point
+
+                    lo_point = self.ratio_func(dim, dx, dt)
+                    if lo_point > lo:
+                        lo = lo_point
+                        x1_real = [FastFraction(x1j, mx * brk_mx) for x1j in x1_point]
+                        x2_real = [FastFraction(x2j, mx * brk_mx) for x2j in x2_point]
+                        t1_real = FastFraction(t1_point, mt * brk_mt)
+                        t2_real = FastFraction(t2_point, mt * brk_mt)
+                        argmax = {'x1': x1_real, 't1': t1_real, 'x2': x2_real, 't2': t2_real, 'junc': junc}
+
+        if use_cache and len(cache) < self._cache_max_size:
+            cache[cache_key] = (lo, up, None)
+
+        return lo, up, argmax
 
     def bound_new_pairs(self, tree, brkline=None):
         """
@@ -378,7 +399,7 @@ class Estimator:
         """
 
         for pair in tree.new_pairs:
-            lo, up, argmax = pair.get_bounds(self.ratio_func, brkline=brkline)
+            lo, up, argmax = self.get_bounds(pair, brkline=brkline)
             priority = up
             tree.add_pair(pair, priority=priority, lo=lo, up=up, data={'argmax': argmax})
         tree.new_pairs = []
@@ -501,7 +522,7 @@ class Estimator:
         return res
 
     def estimate_ratio_fuzzy(self, curve, rel_tol_inv=1000, upper_bound=None,
-                             start_lower_bound=None, start_upper_bound=None, start_curve=None,
+                             start_lower_bound=None, start_upper_bound=None, start_curve=None, start_pairs_tree=None,
                              max_iter=None, sat_pack=100, verbose=False):
         """
         Estimate minimal ratio of a fuzzy curve.
@@ -513,12 +534,16 @@ class Estimator:
         start_lower_bound  --  known lo bound for ratio, start bisection with it
         start_upper_bound  --  known up bound for ratio, start bisection with it
         start_curve  --  known curve with start_upper_bound
+        start_pairs_tree  --  just init_pairs_tree
         max_iter  --  subj
         sat_pack  --  call SAT solve for each pack of new clauses of this size
         find_model  --  bool, will find Curve if set True
         verbose  --  subj
 
-        Return dict {'lo': lower_bound, 'up': upper_bound, 'curve': curve_example}
+        Return dict with keys:
+        'lo' -- lower_bound
+        'up' -- upper_bound
+        'curve' -- curve_example with ratio in [lo, up]
         """
 
         # this method is simply "bisection" algorithm based on test_ratio_fuzzy
@@ -539,6 +564,11 @@ class Estimator:
             curr_up = start_upper_bound
             curr_curve = start_curve
 
+        if start_pairs_tree is None:
+            pairs_tree = self.init_pairs_tree(curve)
+        else:
+            pairs_tree = start_pairs_tree.copy()
+
         # invariant: best curve in the class is in [curr_lo, curr_up]
         # curr_curve ratio also in [curr_lo, curr_up]
 
@@ -554,7 +584,7 @@ class Estimator:
                 new_up = FastFraction(1, 3) * curr_lo + FastFraction(2, 3) * curr_up
             bisect_iter += 1
             logging.warning(
-                '#%d. best in: [%.3f, %.3f]; seek with thresholds: [%.3f, %.3f]', bisect_iter,
+                '#%d. best in: [%.5f, %.5f]; seek with thresholds: [%.5f, %.5f]', bisect_iter,
                 curr_lo, curr_up, new_lo, new_up,
             )
             try:
@@ -565,10 +595,10 @@ class Estimator:
                     good_threshold=Threshold('<=', new_up),
                     max_iter=max_iter,
                     sat_pack=sat_pack,
+                    start_pairs_tree=pairs_tree,
                     verbose=verbose,
                 )
-            except:
-                # TODO: except some Exception class (not KeyboardInterrupt!)
+            except Exception:
                 # run out of iterations
                 break
 
@@ -590,7 +620,8 @@ class Estimator:
         }
 
     def test_ratio_fuzzy(self, curve, bad_threshold, good_threshold,
-                         max_iter=None, sat_pack=100, verbose=False):
+                         max_iter=None, sat_pack=100, verbose=False,
+                         start_pairs_tree=None):
         """
         Test if there is a "good" curve.
 
@@ -609,6 +640,7 @@ class Estimator:
         max_iter  --  max number of divisions; raise Exception if maximum iterations reached
         sat_pack  --  how often do we call sat solver
         find_model  --  subj
+        start_pairs_tree  --  just cache init_pairs_tree
         """
 
         adapter = sat_adapters.CurveSATAdapter(dim=curve.dim)
@@ -633,7 +665,10 @@ class Estimator:
         # because we grow the tree till we can
         # (see also estimate_ratio_regular for more explanations)
 
-        pairs_tree = self.init_pairs_tree(curve)
+        if start_pairs_tree is None:
+            pairs_tree = self.init_pairs_tree(curve)
+        else:
+            pairs_tree = start_pairs_tree.copy()
         pairs_tree.set_good_threshold(good_threshold)
         pairs_tree.set_bad_threshold(bad_threshold)
         self.bound_new_pairs(pairs_tree)
@@ -698,10 +733,13 @@ class Estimator:
             epoch += 1
             bounds = {}
             for cnt, data in enumerate(active):
+                if 'pairs_tree' not in data:
+                    data['pairs_tree'] = self.init_pairs_tree(data['curve'])
                 logging.warning('E%d, curve %d / %d', epoch, cnt + 1, len(active))
                 res = self.estimate_ratio_fuzzy(
                     data['curve'], rel_tol_inv=curr_rel_tol_inv, upper_bound=curr_up,
-                    start_lower_bound=data['lo'], start_upper_bound=data['up'], start_curve=data['example'],
+                    start_lower_bound=data['lo'], start_upper_bound=data['up'],
+                    start_curve=data['example'], start_pairs_tree=data['pairs_tree'],
                 )
                 if res['up'] < curr_up:
                     curr_up = res['up']
@@ -717,7 +755,9 @@ class Estimator:
                     continue
                 if new_lo is None or res['lo'] < new_lo:
                     new_lo = res['lo']
-                new_active.append({'curve': data['curve'], 'lo': res['lo'], 'up': res['up'], 'example': res['curve']})
+                data['lo'], data['up'] = res['lo'], res['up']
+                data['example'] = res['curve']
+                new_active.append(data)
 
             active = new_active
             curr_lo = new_lo

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Benchmark: find best 5*5 curve.
-Run on 2.6Ghz CPU: 3m38, bisect: 267, ratio: 13.1m
+Run on 2.6Ghz CPU: 3m14s, bisect: 291, get_bounds: 8.8m
 """
 
 import sys
@@ -23,7 +23,7 @@ def main():
     for brkline in curve_gen.generate_brklines():
         pcurves.append(SymmFuzzyCurve.init_from_brkline(2, 5, brkline, allow_time_rev=True))
     estimator = Estimator(ratio_l2_squared)
-    res = estimator.estimate_ratio_sequence(pcurves, rel_tol_inv=10000)
+    res = estimator.estimate_ratio_sequence(pcurves, rel_tol_inv=1000000)
     print(res)
 
 if __name__ == "__main__":
