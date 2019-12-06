@@ -59,7 +59,7 @@ class FastFraction:
         return self.n // self.d
 
     def __str__(self):
-        return str(float(self))
+        return '{}/{}'.format(self.n, self.d)
 
     def __hash__(self):
         return hash((self.n, self.d))

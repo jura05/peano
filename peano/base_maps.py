@@ -1,6 +1,6 @@
 import itertools
 
-from sympy.combinatorics.permutations import Permutation
+#from sympy.combinatorics.permutations import Permutation
 
 from .fast_fractions import FastFraction
 
@@ -163,6 +163,7 @@ class BaseMap:
         return other * self * ~other
 
     def is_oriented(self):
+        raise NotImplementedError
         oriented = True
         perm = []
         for k, b in self.coords:

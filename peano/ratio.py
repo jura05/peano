@@ -461,6 +461,26 @@ class Estimator:
 
         return RichPairsTree(pairs)
 
+    def estimate_path(self, path):
+        points = []
+        entr = tuple(cj + gj for cj, gj in zip(path.proto[0], path.gates[0][0]))
+        points.append((0, entr))
+        for cnum, cube, gate in zip(range(len(path.proto)), path.proto, path.gates):
+            exit = tuple(cj + gj for cj, gj in zip(cube, gate[1]))
+            points.append((cnum + 1, exit))
+
+        maxr = None
+        for t1, x1 in points:
+            for t2, x2 in points:
+                if t2 <= t1:
+                    continue
+                dt = t2 - t1
+                dx = tuple(x2j - x1j for x1j, x2j in zip(x1, x2))
+                r = self.ratio_func(path.proto.dim, dx, dt)
+                if maxr is None or r > maxr:
+                    maxr = r
+        return maxr
+
     def estimate_ratio_regular(self, curve, rel_tol_inv=100, max_iter=None, use_vertex_brkline=False, verbose=False):
         """
         Estimate maximal ratio for a regular peano curve (class Curve).
@@ -602,6 +622,7 @@ class Estimator:
                 '#%d. best in: [%.5f, %.5f]; seek with thresholds: [%.5f, %.5f]', stats['bisect_iter'],
                 curr_lo, curr_up, new_lo, new_up,
             )
+            logging.debug('precise test thresholds: %s, %s', new_lo, new_up)
             try:
                 # we always ask for a model, to get actual curve with guarantees
                 test_result = self.test_ratio_fuzzy(
@@ -697,6 +718,9 @@ class Estimator:
         pairs_tree.set_good_threshold(good_threshold)
         pairs_tree.set_bad_threshold(bad_threshold)
         self.bound_new_pairs(pairs_tree)
+        while pairs_tree.bad_pairs:
+            bad_pair = pairs_tree.bad_pairs.pop()
+            adapter.add_forbid_clause(bad_pair.junc, bad_pair.curve)
 
         no_model = None
         stats = Counter()
@@ -790,6 +814,9 @@ class Estimator:
 
                 if res['lo'] <= curr_up:
                     # have a chance to be the best
+                    if total < 0 or total > 200:
+                        # avoid memory leak
+                        res['pairs_tree'] = None
                     new_item = get_item(curve=item.curve, lo=res['lo'], up=res['up'], example=res['curve'], pairs_tree=res['pairs_tree'])
                     heappush(new_active, new_item)
                     logging.warning('added new active item!')
