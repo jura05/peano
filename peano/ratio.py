@@ -723,6 +723,7 @@ class Estimator:
                     sat_current_iter = int(sat_current_iter * sat_strategy['multiplier']) + 1
 
             if try_sat:
+                logging.info('current stats: %s', result['stats'])
                 if not adapter.solve():
                     no_model = True
                     break
