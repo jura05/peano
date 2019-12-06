@@ -539,7 +539,7 @@ class Estimator:
 
     def estimate_ratio_fuzzy(self, curve, rel_tol_inv=1000, upper_bound=None,
                              start_lower_bound=None, start_upper_bound=None, start_curve=None, start_pairs_tree=None,
-                             max_iter=None, sat_pack=100, verbose=False):
+                             max_iter=None, sat_strategy=None, verbose=False):
         """
         Estimate minimal ratio of a fuzzy curve.
 
@@ -552,7 +552,7 @@ class Estimator:
         start_curve  --  known curve with start_upper_bound
         start_pairs_tree  --  just init_pairs_tree
         max_iter  --  subj
-        sat_pack  --  call SAT solve for each pack of new clauses of this size
+        sat_strategy  --  passed to test_ratio_fuzzy, see there (TODO: use kwargs for that)
         find_model  --  bool, will find Curve if set True
         verbose  --  subj
 
@@ -609,7 +609,7 @@ class Estimator:
                     bad_threshold=Threshold('>=', new_lo),
                     good_threshold=Threshold('<=', new_up),
                     max_iter=max_iter,
-                    sat_pack=sat_pack,
+                    sat_strategy=sat_strategy,
                     start_pairs_tree=pairs_tree,
                     verbose=verbose,
                 )
@@ -637,7 +637,7 @@ class Estimator:
         }
 
     def test_ratio_fuzzy(self, curve, bad_threshold, good_threshold,
-                         max_iter=None, sat_pack=100, verbose=False,
+                         max_iter=None, sat_strategy=None, verbose=False,
                          start_pairs_tree=None):
         """
         Test if there is a "good" curve.
@@ -655,13 +655,21 @@ class Estimator:
                             it is possible that there are good curves, but all curves are bad.
                             It this case the return value is not specified.)
         max_iter  --  max number of divisions; raise Exception if maximum iterations reached
-        sat_pack  --  how often do we call sat solver
+        sat_strategy  --    when do we call sat solver:
+                            strategy['type'] == 'equal': call every strategy['count'] divisions
+                            strategy['type'] == 'geometric': call on strategy['multiplier']**k iterations
         find_model  --  subj
         start_pairs_tree  --  just cache init_pairs_tree
         """
 
         adapter = sat_adapters.CurveSATAdapter(dim=curve.dim)
         adapter.init_curve(curve)
+
+        # how often should we call sat solver? default is equidistant strategy
+        if sat_strategy is None:
+            sat_strategy = {'type': 'equal', 'count': 100}
+        if sat_strategy['type'] == 'geometric':
+            sat_current_iter = 1
 
         # okay, we allow FastFractions as thresholds
         if not isinstance(good_threshold, Threshold):
@@ -705,28 +713,42 @@ class Estimator:
                 bad_pair = pairs_tree.bad_pairs.pop()
                 adapter.add_forbid_clause(bad_pair.junc, bad_pair.curve)
 
-            if stats['divide_iter'] % sat_pack == 0:
+            try_sat = False
+            if sat_strategy['type'] == 'equal':
+                if stats['divide_iter'] % sat_strategy['count'] == 0:
+                    try_sat = True
+            elif sat_strategy['type'] == 'geometric':
+                if stats['divide_iter'] >= sat_current_iter:
+                    try_sat = True
+                    sat_current_iter = int(sat_current_iter * sat_strategy['multiplier']) + 1
+
+            if try_sat:
                 if not adapter.solve():
                     no_model = True
                     break
 
         result['stats'].update({'ptree_' + k: v for k, v in pairs_tree.stats.items()})
-        result['stats'].update({'sat_' + k: v for k, v in adapter.stats().items()})
+        result['stats'].update({'sat_' + k: v for k, v in adapter.get_stats().items()})
 
         if no_model or not adapter.solve():
             return result
 
-        print('SAT model exists!')
         model = adapter.get_model()
         result['model'] = model
         result['curve'] = adapter.get_curve_from_model(curve, model)
         return result
 
-    def estimate_ratio_sequence(self, curves, rel_tol_inv):
+    def estimate_ratio_sequence(self, curves, rel_tol_inv, rel_tol_inv_mult=2, **kwargs):
         """
         Estimate minimal curve ratio for sequence of fuzzy curves.
 
         This method relies totally on estimate_ratio_fuzzy.
+        Params:
+        rel_tol_inv  --  subj
+        rel_tol_inv_mult  --  current rel_tol_inv is multiplied by this every epoch
+
+        Additional kwargs are passed as is to estimate_ratio_fuzzy.
+        Returns lo, up, and list of curve candidates.
         """
 
         CurveItem = namedtuple('CurveItem', ['priority', 'lo', 'up', 'curve', 'example', 'pairs_tree'])
@@ -749,22 +771,19 @@ class Estimator:
         stats = Counter()
         tolerance = FastFraction(rel_tol_inv + 1, rel_tol_inv)
         while curr_up is None or curr_up > curr_lo * tolerance:
-            curr_rel_tol_inv *= 2
+            curr_rel_tol_inv *= rel_tol_inv_mult
             epoch += 1
             total = len(active) if isinstance(active, list) else -1
             new_active = []  # heap of CurveItem
             for cnt, item in enumerate(active):
                 logging.warning('E%d, curve %d / %d', epoch, cnt + 1, total)
-                if curr_up is None:
-                    curve0 = next(item.curve.gen_possible_curves())
-                    curr_up = self.estimate_ratio_regular(curve0, rel_tol_inv=rel_tol_inv)['up']
-
                 res = self.estimate_ratio_fuzzy(
                     item.curve, rel_tol_inv=curr_rel_tol_inv, upper_bound=curr_up,
                     start_lower_bound=item.lo, start_upper_bound=item.up,
                     start_curve=item.example, start_pairs_tree=item.pairs_tree,
+                    **kwargs,
                 )
-                if res['up'] < curr_up:
+                if curr_up is None or res['up'] < curr_up:
                     curr_up = res['up']
                     logging.warning('new upper bound: %.3f', curr_up)
 

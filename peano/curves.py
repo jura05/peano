@@ -25,6 +25,9 @@ class Proto:
     def __eq__(self, other):
         return self._cubes == other._cubes
 
+    def __hash__(self):
+        return hash(self._cubes)
+
     def __rmul__(self, base_map):
         if not isinstance(base_map, BaseMap):
             return NotImplemented
@@ -665,14 +668,9 @@ class SymmFuzzyCurve(FuzzyCurve):
             yield repr_spec * symm
 
     @classmethod
-    def init_from_brkline(cls, dim, div, brkline, allow_time_rev):
-        proto = [brk[0] for brk in brkline]
-
-        cube_first, entr_first, _ = brkline[0]
-        entr = tuple(FastFraction(cj + ej, div) for cj, ej in zip(cube_first, entr_first))
-
-        cube_last, _, exit_last = brkline[-1]
-        exit = tuple(FastFraction(cj + ej, div) for cj, ej in zip(cube_last, exit_last))
+    def init_from_path(cls, dim, div, path, allow_time_rev):
+        proto = path.proto
+        entr, exit = path.entrance, path.exit
 
         symmetries = []
         for bm in gen_constraint_cube_maps(dim, {entr: entr, exit: exit}):
@@ -684,8 +682,8 @@ class SymmFuzzyCurve(FuzzyCurve):
         specs = [None] * len(proto)
         repr_specs = [None] * len(proto)
 
-        for cnum, brk in enumerate(brkline):
-            cube, rel_entr, rel_exit = brk
+        for cnum, gate in enumerate(path.gates):
+            rel_entr, rel_exit = gate
             rel_entr = tuple(FastFraction(xj, 1) if isinstance(xj, int) else xj for xj in rel_entr)
             rel_exit = tuple(FastFraction(xj, 1) if isinstance(xj, int) else xj for xj in rel_exit)
             repr_specs[cnum] = Spec(next(gen_constraint_cube_maps(dim, {entr: rel_entr, exit: rel_exit})))

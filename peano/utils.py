@@ -20,6 +20,12 @@ def ratio_l2_squared(d, dv, dt):
     return FastFraction(sum(x**2 for x in dv)**d, dt**2)
 
 
+def ratio_l2(d, dv, dt):
+    assert d % 2 == 0
+    d2 = d // 2
+    return FastFraction(sum(x**2 for x in dv)**d2, dt)
+
+
 @lru_cache(maxsize=2**20)
 def get_int_cube_with_cache(dim, N, cubes):
     """Integer coordinates for sequence of embedded cubes."""

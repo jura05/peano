@@ -3,8 +3,8 @@ import unittest
 from peano.fast_fractions import FastFraction
 from peano.examples import *
 from peano import utils
-from peano.gen_curve import CurveGenerator
-from peano.curves import SymmFuzzyCurve
+from peano.paths import PathsGenerator
+from peano.curves import SymmFuzzyCurve, Proto
 from peano.ratio import Estimator
 
 
@@ -118,22 +118,21 @@ class TestCurve(unittest.TestCase):
     #    assert pcurve.test_ratio(utils.ratio_l2_squared, lower_bound=FastFraction(90, 1), upper_bound=FastFraction(100, 1))
 
     def test_55_ratio(self):
-        good_proto = [
+        good_proto = Proto(dim=2, div=5, cubes=[
             (0, 0), (0, 1), (1, 1), (1, 0), (2, 0),
             (2, 1), (2, 2), (1, 2), (0, 2), (0, 3),
             (0, 4), (1, 4), (1, 3), (2, 3), (2, 4),
             (3, 4), (4, 4), (4, 3), (3, 3), (3, 2),
             (4, 2), (4, 1), (3, 1), (3, 0), (4, 0),
-        ]
+        ])
 
-        curve_gen = CurveGenerator(dim=2, div=5, hdist=1, max_cdist=1, verbose=1)
-        for brkline in curve_gen.generate_brklines():
-            proto = [brk[0] for brk in brkline]
-            if proto == good_proto:
-                brk0 = brkline
+        paths_gen = PathsGenerator(dim=2, div=5, hdist=1, max_cdist=1, verbose=1)
+        for path in paths_gen.generate_paths():
+            if path.proto == good_proto:
+                path0 = path
                 break
 
-        pcurve = SymmFuzzyCurve.init_from_brkline(2, 5, brk0, allow_time_rev=True)
+        pcurve = SymmFuzzyCurve.init_from_path(2, 5, path0, allow_time_rev=True)
         estimator = Estimator(utils.ratio_l2_squared)
         curve = estimator.estimate_ratio(pcurve, rel_tol_inv=10000, verbose=False)['curve']
         ratio = estimator.estimate_ratio(curve, rel_tol_inv=10000, use_vertex_brkline=True, verbose=False)

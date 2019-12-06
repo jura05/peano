@@ -1,4 +1,5 @@
 import itertools
+from collections import Counter
 
 from pysat.solvers import *
 
@@ -22,6 +23,7 @@ class CurveSATAdapter:
         self.curve_vars = set()  # just cache (?)
         self.var_no = {}
         self.solver = None  # init at solve
+        self.stats = Counter()
 
     @staticmethod
     def get_sp_var(pnum, cnum, sp):
@@ -132,15 +134,18 @@ class CurveSATAdapter:
         for clause in clauses:
             self.append_clause(clause)
 
-    def stats(self):
-        return {
+    def get_stats(self):
+        curr = {
             'clauses_count': len(self.int_clauses),
             'variables_count': len(self.var_no),
         }
+        curr.update(self.stats)
+        return curr
 
     def solve(self):
         self.solver = Glucose3()
         self.solver.append_formula(self.int_clauses)
+        self.stats['solve'] += 1
         return self.solver.solve()
 
     def get_model(self):
