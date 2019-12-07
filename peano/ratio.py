@@ -763,12 +763,13 @@ class Estimator:
         result['curve'] = adapter.get_curve_from_model(curve, model)
         return result
 
-    def estimate_ratio_sequence(self, curves, rel_tol_inv, rel_tol_inv_mult=2, **kwargs):
+    def estimate_ratio_sequence(self, curves, rel_tol_inv, rel_tol_inv_mult=2, upper_bound=None, **kwargs):
         """
         Estimate minimal curve ratio for sequence of fuzzy curves.
 
         This method relies totally on estimate_ratio_fuzzy.
         Params:
+        upper_bound  --  apriori upper bound for best ratio (undefined behaviour if violated)
         rel_tol_inv  --  subj
         rel_tol_inv_mult  --  current rel_tol_inv is multiplied by this every epoch
 
@@ -786,7 +787,7 @@ class Estimator:
             return CurveItem(priority, lo, up, curve, example, pairs_tree)
 
         curr_lo = FastFraction(0, 1)
-        curr_up = None
+        curr_up = upper_bound
 
         active = (get_item(curve) for curve in curves)
         if isinstance(curves, Sized):
@@ -821,8 +822,8 @@ class Estimator:
                     heappush(new_active, new_item)
                     logging.warning('added new active item!')
 
-                while new_active[0].lo > curr_up:  # priority = -lo
-                    heappop(new_active)
+                while new_active and new_active[0].lo > curr_up:  # priority = -lo
+                    heappop (new_active)
 
                 logging.warning('current active: %d, stats: %s', len(new_active), res['stats'])
                 stats.update(res['stats'])
