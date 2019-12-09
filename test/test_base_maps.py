@@ -1,13 +1,13 @@
 import unittest
 
-from peano.base_maps import BaseMap, gen_base_maps
+from peano.base_maps import BaseMap
 
 
 class TestBaseMap(unittest.TestCase):
     def setUp(self):
         self.base_maps = []
         for dim in range(2, 6):
-            self.base_maps += list(gen_base_maps(dim))
+            self.base_maps += list(BaseMap.gen_base_maps(dim))
 
     def test_mul(self):
         bm1 = BaseMap.from_basis('Ij')

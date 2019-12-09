@@ -5,7 +5,7 @@ import logging
 import itertools
 
 from .curves import Proto
-from .base_maps import gen_constraint_cube_maps
+from .base_maps import BaseMap
 from .fast_fractions import FastFraction
 
 
@@ -49,8 +49,8 @@ def gen_uniq(dim, paths):
     seen = set()
     for path in paths:
         entr, exit = path.entrance, path.exit
-        bms = list(gen_constraint_cube_maps(dim, {entr: entr, exit: exit}))
-        bms += [bm.reversed_time() for bm in gen_constraint_cube_maps(dim, {entr: exit, exit: entr})]
+        bms = list(BaseMap.gen_constraint_cube_maps(dim, {entr: entr, exit: exit}))
+        bms += [bm.reversed_time() for bm in BaseMap.gen_constraint_cube_maps(dim, {entr: exit, exit: entr})]
         if any(bm * path in seen for bm in bms):
             continue
         seen.add(path)

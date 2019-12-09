@@ -1,6 +1,6 @@
 import itertools
 
-#from sympy.combinatorics.permutations import Permutation
+from sympy.combinatorics.permutations import Permutation
 
 from .fast_fractions import FastFraction
 
@@ -163,7 +163,6 @@ class BaseMap:
         return other * self * ~other
 
     def is_oriented(self):
-        raise NotImplementedError
         oriented = True
         perm = []
         for k, b in self.coords:
@@ -204,19 +203,19 @@ class BaseMap:
     def apply_cnum(self, genus, cnum):
         return genus - 1 - cnum if self.time_rev else cnum
 
+    @classmethod
+    def gen_base_maps(cls, dim, time_rev=None):
+        time_rev_variants = [True, False] if time_rev is None else [time_rev]
+        for perm in itertools.permutations(range(dim)):
+            for flip in itertools.product([True, False], repeat=dim):
+                for time_rev in time_rev_variants:
+                    yield cls(zip(perm, flip), time_rev)
 
-def gen_base_maps(dim, time_rev=None):
-    time_rev_variants = [True, False] if time_rev is None else [time_rev]
-    for perm in itertools.permutations(range(dim)):
-        for flip in itertools.product([True, False], repeat=dim):
-            for time_rev in time_rev_variants:
-                yield BaseMap(zip(perm, flip), time_rev)
-
-
-def gen_constraint_cube_maps(dim, points_map):
-    for bm in gen_base_maps(dim, time_rev=False):
-        if all(bm.apply_x_fraction(src) == dst for src, dst in points_map.items()):
-            yield bm
+    @classmethod
+    def gen_constraint_cube_maps(cls, dim, points_map):
+        for bm in cls.gen_base_maps(dim, time_rev=False):
+            if all(bm.apply_x_fraction(src) == dst for src, dst in points_map.items()):
+                yield bm
 
 
 class Spec:

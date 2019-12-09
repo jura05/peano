@@ -2,7 +2,7 @@ from collections import namedtuple
 import itertools
 
 from .fast_fractions import FastFraction
-from .base_maps import BaseMap, Spec, gen_constraint_cube_maps
+from .base_maps import BaseMap, Spec
 from .utils import get_periodic_sum
 
 
@@ -436,11 +436,11 @@ class Curve(FuzzyCurve):
             exit = self.get_exit(pnum)
 
             symmetries = []
-            for bm in gen_constraint_cube_maps(self.dim, {entr: entr, exit: exit}):
+            for bm in BaseMap.gen_constraint_cube_maps(self.dim, {entr: entr, exit: exit}):
                 symmetries.append(bm)
                 
             if allow_time_rev:
-                for bm in gen_constraint_cube_maps(self.dim, {entr: exit, exit: entr}):
+                for bm in BaseMap.gen_constraint_cube_maps(self.dim, {entr: exit, exit: entr}):
                     symmetries.append(bm.reversed_time())
 
             repr_specs = pattern.specs  # now old specs are only representatives
@@ -673,10 +673,10 @@ class SymmFuzzyCurve(FuzzyCurve):
         entr, exit = path.entrance, path.exit
 
         symmetries = []
-        for bm in gen_constraint_cube_maps(dim, {entr: entr, exit: exit}):
+        for bm in BaseMap.gen_constraint_cube_maps(dim, {entr: entr, exit: exit}):
             symmetries.append(bm)
         if allow_time_rev:
-            for bm in gen_constraint_cube_maps(dim, {entr: exit, exit: entr}):
+            for bm in BaseMap.gen_constraint_cube_maps(dim, {entr: exit, exit: entr}):
                 symmetries.append(bm.reversed_time())
 
         specs = [None] * len(proto)
@@ -686,7 +686,7 @@ class SymmFuzzyCurve(FuzzyCurve):
             rel_entr, rel_exit = gate
             rel_entr = tuple(FastFraction(xj, 1) if isinstance(xj, int) else xj for xj in rel_entr)
             rel_exit = tuple(FastFraction(xj, 1) if isinstance(xj, int) else xj for xj in rel_exit)
-            repr_specs[cnum] = Spec(next(gen_constraint_cube_maps(dim, {entr: rel_entr, exit: rel_exit})))
+            repr_specs[cnum] = Spec(next(BaseMap.gen_constraint_cube_maps(dim, {entr: rel_entr, exit: rel_exit})))
 
         return cls(
             dim=dim, div=div,
