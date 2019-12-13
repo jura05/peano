@@ -217,6 +217,18 @@ class BaseMap:
             if all(bm.apply_x_fraction(src) == dst for src, dst in points_map.items()):
                 yield bm
 
+    @classmethod
+    def std(cls, x):
+        """Put x in "standard" (minimal) position, return (std_x, std_bm)."""
+        dim = len(x)
+        minx, minbm = None, None
+        for bm in cls.gen_base_maps(dim, time_rev=False):
+            bmx = bm.apply_x_fraction(x)
+            if minx is None or bmx < minx:
+                minx = bmx
+                minbm = bm
+        return minx, minbm
+
 
 class Spec:
     """

@@ -462,11 +462,12 @@ class Estimator:
         return RichPairsTree(pairs)
 
     def estimate_path(self, path):
+        return FastFraction(10000000,1)  # TODO ZOPA_
         points = []
-        entr = tuple(cj + gj for cj, gj in zip(path.proto[0], path.gates[0][0]))
+        entr = tuple(FastFraction(cj, 1) + gj for cj, gj in zip(path.proto[0], path.gates[0].entrance))
         points.append((0, entr))
         for cnum, cube, gate in zip(range(len(path.proto)), path.proto, path.gates):
-            exit = tuple(cj + gj for cj, gj in zip(cube, gate[1]))
+            exit = tuple(FastFraction(cj, 1) + gj for cj, gj in zip(cube, gate.exit))
             points.append((cnum + 1, exit))
 
         maxr = None
@@ -476,6 +477,7 @@ class Estimator:
                     continue
                 dt = t2 - t1
                 dx = tuple(x2j - x1j for x1j, x2j in zip(x1, x2))
+                print(dx)
                 r = self.ratio_func(path.proto.dim, dx, dt)
                 if maxr is None or r > maxr:
                     maxr = r
@@ -777,19 +779,19 @@ class Estimator:
         Returns lo, up, and list of curve candidates.
         """
 
-        CurveItem = namedtuple('CurveItem', ['priority', 'lo', 'up', 'curve', 'example', 'pairs_tree'])
+        CurveItem = namedtuple('CurveItem', ['priority', 'lo', 'up', 'curve', 'example', 'pairs_tree', 'path_idx'])
         _inc = 0
 
-        def get_item(curve, lo=None, up=None, example=None, pairs_tree=None):
+        def get_item(curve, lo=None, up=None, example=None, pairs_tree=None, path_idx=None):
             nonlocal _inc
             _inc += 1
             priority = ((-lo if lo is not None else None), _inc)
-            return CurveItem(priority, lo, up, curve, example, pairs_tree)
+            return CurveItem(priority, lo, up, curve, example, pairs_tree, path_idx)
 
         curr_lo = FastFraction(0, 1)
         curr_up = upper_bound
 
-        active = (get_item(curve) for curve in curves)
+        active = (get_item(curve, path_idx=idx) for idx, curve in enumerate(curves))
         if isinstance(curves, Sized):
             active = list(active)
         curr_rel_tol_inv = 1
@@ -818,7 +820,12 @@ class Estimator:
                     if total < 0 or total > 200:
                         # avoid memory leak
                         res['pairs_tree'] = None
-                    new_item = get_item(curve=item.curve, lo=res['lo'], up=res['up'], example=res['curve'], pairs_tree=res['pairs_tree'])
+                    new_item = get_item(
+                        curve=item.curve,
+                        lo=res['lo'], up=res['up'],
+                        example=res['curve'], pairs_tree=res['pairs_tree'],
+                        path_idx=item.path_idx,
+                    )
                     heappush(new_active, new_item)
                     logging.warning('added new active item!')
 
@@ -832,7 +839,12 @@ class Estimator:
             curr_lo = min(item.lo for item in active)
             logging.warning('current bounds: [%.5f, %.5f]', curr_lo, curr_up)
 
-        return {'lo': curr_lo, 'up': curr_up, 'curves': [d.curve for d in active], 'stats': stats}
+        return {
+            'lo': curr_lo, 'up': curr_up,
+            'curves': [d.curve for d in active],
+            'paths': [d.path_idx for d in active],
+            'stats': stats,
+        }
 
 
 class IntegerBrokenLine:

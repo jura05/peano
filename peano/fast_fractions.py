@@ -55,11 +55,15 @@ class FastFraction:
     def __float__(self):
         return self.n / self.d
 
+    # not compliant with float.int for negative values; gives lfloor
     def __int__(self):
         return self.n // self.d
 
     def __str__(self):
-        return '{}/{}'.format(self.n, self.d)
+        if self.d == 1:
+            return str(self.n)
+        else:
+            return '{}/{}'.format(self.n, self.d)
 
     def __hash__(self):
         return hash((self.n, self.d))

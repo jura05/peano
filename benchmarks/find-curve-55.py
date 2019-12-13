@@ -13,7 +13,7 @@ sys.path.append('.')
 from peano import paths
 from peano.ratio import Estimator
 from peano.utils import ratio_l2_squared
-from peano.curves import SymmFuzzyCurve
+from peano.curves import PathFuzzyCurve
 
 import logging
 
@@ -22,7 +22,7 @@ logging.basicConfig(level=0, stream=sys.stdout, format='[%(process)d] %(asctime)
 
 def main():
     curve_gen = paths.PathsGenerator(dim=2, div=5, hdist=1, max_cdist=1, verbose=1)
-    pcurves = list(SymmFuzzyCurve.init_from_path(2, 5, brkline, allow_time_rev=True) for brkline in paths.gen_uniq(2, curve_gen.generate_paths()))
+    pcurves = list(PathFuzzyCurve.init_from_paths([path]) for path in paths.gen_uniq(2, curve_gen.generate_paths()))
     estimator = Estimator(ratio_l2_squared)
     res = estimator.estimate_ratio_sequence(
         pcurves, rel_tol_inv=1000000, rel_tol_inv_mult=2, sat_strategy={'type': 'geometric', 'multiplier': 1.5},

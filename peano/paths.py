@@ -4,9 +4,65 @@ from collections import namedtuple, Counter
 import logging
 import itertools
 
-from .curves import Proto
 from .base_maps import BaseMap
 from .fast_fractions import FastFraction
+
+
+class Proto:
+    """
+    Curve prototype -- sequence of cubes.
+
+    We allow None-s for some of cubes, to support usage of get_entrance/get_exit methods.
+    """
+
+    def __init__(self, dim, div, cubes):
+        self.dim = dim
+        self.div = div
+        self._cubes = tuple(tuple(cube) if cube is not None else None for cube in cubes)
+
+    def __iter__(self):
+        return iter(self._cubes)
+
+    def __getitem__(self, idx):
+        return self._cubes[idx]
+
+    def __len__(self):
+        return len(self._cubes)
+
+    def __eq__(self, other):
+        return self._cubes == other._cubes
+
+    def __hash__(self):
+        return hash(self._cubes)
+
+    def __rmul__(self, base_map):
+        if not isinstance(base_map, BaseMap):
+            return NotImplemented
+        cubes = [base_map.apply_cube(self.div, cube) if cube is not None else None for cube in self._cubes]
+        if base_map.time_rev:
+            cubes = reversed(cubes)
+        return type(self)(self.dim, self.div, cubes)
+
+
+class Gate(namedtuple('Gate', ['entrance', 'exit'])):
+
+    def __rmul__(self, base_map):
+        ne, nx = base_map.apply_x_fraction(self.entrance), base_map.apply_x_fraction(self.exit)
+        if base_map.time_rev:
+            ne, nx = nx, ne
+        return type(self)(ne, nx)
+
+    def reversed(self):
+        return type(self)(self.exit, self.entrance)
+
+    def std(self):
+        dim = len(self.entrance)
+        return min(bm * self for bm in BaseMap.gen_base_maps(dim))
+
+    def __str__(self):
+        entr_str = '(' + ','.join([str(pj) for pj in self.entrance]) + ')'
+        exit_str = '(' + ','.join([str(pj) for pj in self.exit]) + ')'
+        return entr_str + '-->' + exit_str
 
 
 class CurvePath:
@@ -14,16 +70,20 @@ class CurvePath:
 
     def __init__(self, proto, gates):
         self.proto = proto
+        self.dim = proto.dim
+        self.div = proto.div
         self.gates = tuple(gates)
-        self.entrance = tuple(FastFraction(cj + ej, proto.div) for cj, ej in zip(proto[0], gates[0][0]))
-        self.exit = tuple(FastFraction(cj + ej, proto.div) for cj, ej in zip(proto[-1], gates[-1][1]))
+        div_inv = FastFraction(1, proto.div)
+        self.entrance = tuple((FastFraction(cj, 1) + ej) * div_inv for cj, ej in zip(proto[0], gates[0].entrance))
+        self.exit = tuple((FastFraction(cj, 1) + ej) * div_inv for cj, ej in zip(proto[-1], gates[-1].exit))
+        self.gate = Gate(self.entrance, self.exit)
 
     @classmethod
     def from_data(cls, dim, div, data):
         """Create path from triples (cube, entr, exit)."""
-        cubes = (cube for cube, _, _ in data)
+        cubes = (d[0] for d in data)
         proto = Proto(dim, div, cubes)
-        gates = tuple((entr, exit) for _, entr, exit in data)
+        gates = tuple(d[1] for d in data)
         return cls(proto, gates)
 
     def __eq__(self, other):
@@ -34,21 +94,19 @@ class CurvePath:
 
     def __rmul__(self, base_map):
         new_proto = base_map * self.proto
-        new_gates = []
-        for entr, exit in self.gates:
-            new_entr = base_map.apply_x(entr)
-            new_exit = base_map.apply_x(exit)
-            new_gates.append((new_entr, new_exit))
+        new_gates = [base_map * gate for gate in self.gates]
         if base_map.time_rev:
-            new_gates = [(exit, entr) for entr, exit in new_gates]
             new_gates.reverse()
         return CurvePath(new_proto, new_gates)
+
+    def reversed(self):
+        return BaseMap.id_map(self.proto.dim).reversed_time() * self
 
 
 def gen_uniq(dim, paths):
     seen = set()
     for path in paths:
-        entr, exit = path.entrance, path.exit
+        entr, exit = path.gate
         bms = list(BaseMap.gen_constraint_cube_maps(dim, {entr: entr, exit: exit}))
         bms += [bm.reversed_time() for bm in BaseMap.gen_constraint_cube_maps(dim, {entr: exit, exit: entr})]
         if any(bm * path in seen for bm in bms):
@@ -57,7 +115,7 @@ def gen_uniq(dim, paths):
         yield path
 
 
-class PathNode(namedtuple('PathNode', ['head', 'entrance', 'exit', 'prev', 'len'])):
+class PathNode(namedtuple('PathNode', ['head', 'gate', 'prev', 'len'])):
     """
     Node of the tree representing partial paths.
 
@@ -65,8 +123,7 @@ class PathNode(namedtuple('PathNode', ['head', 'entrance', 'exit', 'prev', 'len'
     Here we allow partial paths, to be used during generation.
 
     head  --  end of path cube
-    entrance  --  entrance head (relative, i.e. point in {0,1}^d)
-    exit  --  exit from head (relative)
+    gate  --  gate for head cube
     prev  --  link to tail path (without head)
     len  --  path length
     """
@@ -75,7 +132,7 @@ class PathNode(namedtuple('PathNode', ['head', 'entrance', 'exit', 'prev', 'len'
         data = []
         node = self
         while node is not None:
-            data.append((node.head, node.entrance, node.exit))
+            data.append((node.head, node.gate))
             node = node.prev
         data.reverse()
         return data
@@ -96,18 +153,19 @@ class PathNode(namedtuple('PathNode', ['head', 'entrance', 'exit', 'prev', 'len'
     # состояние, которое определяет продолжимость пути
     # entrance нужен лишь для удобства пересечения с финишем
     def state(self):
-        return (frozenset(self.flat()[1:]), self.head, self.entrance, self.exit)
+        return (frozenset(self.flat()[1:]), self.head, self.gate)
 
 
 class PathsGenerator:
     """Generate vertex curves of given div, with entrance at 0 and exit (1,1,..,1,0,0,..,0)."""
 
-    def __init__(self, dim, div, hdist, max_cdist=None, verbose=0):
+    def __init__(self, dim, div, gates=None, hdist=None, max_cdist=None, verbose=0):
         """
         Init paths generator.
 
         dim, div  --  subj
         hdist  --  k means curve with entr (0,0,..,0), exit (1,1,..,1,0,..,0), with k "1"-s
+        gate  --  TODO
         max_cdist  --  maximum l1-distance between cubes
         verbose  --  subj
         """
@@ -118,93 +176,78 @@ class PathsGenerator:
         self.stats = Counter()
         N = self.div
 
-        self.exit = (1,) * hdist + (0,) * (dim - hdist)
+        if gates is None:
+            gates = [Gate(
+                entrance=(FastFraction(0, 1),) * dim,
+                exit=(FastFraction(0, 1),) * (dim - hdist) + (FastFraction(1, 1),) * hdist,
+            )]
 
-        # здесь бы использовать continue_path !!!
-        start_init = []
-        finish_init = []
-        for arr_coords in itertools.combinations(range(dim), hdist):
-            # положение меняется на координатах arr_coords
-            st_arr_0 = (0,) * dim
-            st_arr_1 = tuple(1 if j in arr_coords else 0 for j in range(dim))
-            st_path = PathNode(head=(0,) * dim, prev=None, len=1, entrance=st_arr_0, exit=st_arr_1)
-            start_init.append(st_path)
+        self.gates = gates
+        self.next_dict = self.get_next_dict(gates, max_cdist)
 
-            fn_head = (N - 1,) * hdist + (0,) * (dim - hdist)
-            fn_arr_0 = (1,) * hdist + (0,) * (dim - hdist)
-            fn_arr_1 = tuple(1 - fn_arr_0[j] if j in arr_coords else fn_arr_0[j] for j in range(dim))
-            fn_path = PathNode(head=fn_head, prev=None, len=1, entrance=fn_arr_0, exit=fn_arr_1)
-            finish_init.append(fn_path)
 
-        self.start_init = start_init
-        self.finish_init = finish_init
-        self.next_dict = self.get_next_dict(hdist, max_cdist)
+    # point is in R^d, get integer cubes for it
+    @staticmethod
+    def gen_cubes(point):
+        # ranges for cubej
+        minjs = []
+        maxjs = []
+        for xj in point:
+            ij = int(xj)
+            if xj == FastFraction(ij, 1):
+                minj, maxj = ij-1, ij
+            else:
+                minj, maxj = ij, ij
+            minjs.append(minj)
+            maxjs.append(maxj)
+        ranges = [range(minj, maxj + 1) for minj, maxj in zip(minjs, maxjs)]
+        yield from itertools.product(*ranges)
 
-    def get_next_dict(self, hdist, max_cdist):
+    def get_next_dict(self, gates, max_cdist):
         """
-        Get a dict: exit => [(delta, new_entrance, new_exit), ...]
+        Get a dict: exit => [(cube_delta, new_gate), ...]
 
         Params:
             dim:    subj
-            hdist:  arrow changes hdist coordinates
+            gate:   TODO
             max_cdist: do not allow cube changes greater than it
         """
 
-        result = {}
         dim = self.dim
 
-        # стартовые позиции - все вершины куба
-        start_positions = itertools.product((0, 1), repeat=dim)
+        gate_set = set()
+        for bm in BaseMap.gen_base_maps(dim):
+            for gate in gates:
+                gate_set.add(bm * gate)
+        gate_list = sorted(gate_set)
 
-        # сдвиги - вектора из {0,1,-1} с ||v||_1 = hdist
-        deltas = []
-        for delta in itertools.product((0,1,-1), repeat=dim):
-            l1norm = sum(abs(dj) for dj in delta)
-            if l1norm == hdist:
-                deltas.append(delta)
-
-        for start_pos in start_positions:
-            for delta in deltas:
-                new_pos = tuple(start_pos[j] + delta[j] for j in range(dim))
-                # ищем кубы, содержащие и start_pos, и new_pos
-                # куб: {(x0,..): cube[j] <= x[j] <= cube[j]+1}
-                x_max = [min(start_pos[j], new_pos[j]) for j in range(dim)]
-                x_min = [max(start_pos[j], new_pos[j]) - 1 for j in range(dim)]
-                ranges = [range(x_min[j], x_max[j] + 1) for j in range(dim)]
-                new_cubes = set()
-                for cj in itertools.product(*ranges):
-                    if cj != (0,) * dim:
-                        new_cubes.add(cj)
-
-                for new_cube in new_cubes:
-                    start_rel_pos = tuple(start_pos[j] - new_cube[j] for j in range(dim))
-                    new_rel_pos = tuple(new_pos[j] - new_cube[j] for j in range(dim))
-                    if start_pos not in result:
-                        result[start_pos] = []
-                    result[start_pos].append((new_cube, start_rel_pos, new_rel_pos))
-
-        if max_cdist is not None:
-            for start_pos, data in result.items():
-                result[start_pos] = [(d, entr, exit) for d, entr, exit in data if sum(abs(dj) for dj in d) <= max_cdist]
+        # start positions - all exits
+        result = {}
+        for pt in [g.exit for g in gate_list]:
+            if pt in result:
+                continue
+            new_pos = []
+            for cube in self.gen_cubes(pt):
+                if cube == (0,) * dim:
+                    continue
+                if max_cdist is not None:
+                    if sum(abs(cj) for cj in cube) > max_cdist:
+                        continue
+                rel_pos = tuple(pj - FastFraction(cj, 1) for pj, cj in zip(pt, cube))
+                for g in gate_list:
+                    if g.entrance == rel_pos:
+                        new_pos.append((cube, g))
+            result[pt] = new_pos
 
         return result
 
-    def get_non_cube(self, reverse=False):
-        N = self.div
-        d = self.dim
-        if reverse:
-            return (0,) * d
-        else:
-            return tuple((N-1) * ej for ej in self.exit)
-
-    def continue_path(self, path, cubeset=None, non_cube=None, finish_pids=None):
+    def continue_path(self, path, cubeset=None, finish_pids=None):
         """
         Add one edge to a path, yields paths.
 
         Params:
             path -      subj
             cubeset -   support of path (optimization!)
-            non_cube -  avoid this cube
         """
 
         self.stats['continue'] += 1
@@ -215,15 +258,15 @@ class PathsGenerator:
         if cubeset is None:
             cubeset = path.support()
 
-        for delta, entrance, exit in self.next_dict[path.exit]:
+        for delta, gate in self.next_dict[path.gate.exit]:
             new_head = tuple(head[j] + delta[j] for j in range(d))
-            if any(nj < 0 or nj == N for nj in new_head) or new_head in cubeset or new_head == non_cube:
+            if any(nj < 0 or nj == N for nj in new_head) or new_head in cubeset:
                 continue
             if finish_pids is not None:
-                pid = hash((frozenset(cubeset), new_head, entrance, exit))
+                pid = hash((frozenset(cubeset), new_head, gate))
                 if pid not in finish_pids:
                     continue
-            yield PathNode(head=new_head, entrance=entrance, exit=exit, prev=path, len=path.len + 1)
+            yield PathNode(head=new_head, gate=gate, prev=path, len=path.len + 1)
 
     def depth_search(self, paths, max_len, finish_pids):
         """Depth-first search for paths.
@@ -233,27 +276,25 @@ class PathsGenerator:
             finish_pids -    finish path ids
         """
         todo = [(path, path.support()) for path in paths]
-        non_cube = self.get_non_cube()
         while todo:
             path, cubeset = todo.pop()
             if path.len == (max_len - 1):
                 # путь почти закончен, нужно проверять на соответствие финишу
-                yield from self.continue_path(path, cubeset, non_cube, finish_pids=finish_pids)
+                yield from self.continue_path(path, cubeset, finish_pids=finish_pids)
             else:
-                for np in self.continue_path(path, cubeset, non_cube):
+                for np in self.continue_path(path, cubeset):
                     new_cubeset = cubeset.copy()
                     new_cubeset.add(np.head)
                     todo.append((np, new_cubeset))
 
     # в худшем случае мы удваиваем работу:(
-    def width_search(self, paths, max_steps, max_count, reverse=False):
+    def width_search(self, paths, max_steps, max_count):
         """Width-search for given starting paths."""
         curr_paths = paths
-        non_cube = self.get_non_cube(reverse)
         for i in range(max_steps):
             new_paths = []
             for path in curr_paths:
-                new_paths += self.continue_path(path, non_cube=non_cube)
+                new_paths += self.continue_path(path)
                 if len(new_paths) > max_count:
                     break
             if len(new_paths) > max_count:
@@ -262,13 +303,47 @@ class PathsGenerator:
             logging.info('width_search: step %d, expanded to %d' % (i+1, len(curr_paths)))
         return curr_paths
 
-    def generate_paths(self, start_max_count=100, finish_max_count=10 ** 6):
+    def generate_paths(self, **kwargs):
+        #TEMPORORAY
+        yield from self.generate_paths_generic(self.gates[0], **kwargs)
+        return
+
+        path_lists = [list(self.generate_paths_generic(gate, **kwargs)) for gate in self.gates]
+        yield from itertools.product(*path_lists)
+
+    def generate_paths_generic(self, gate, start_max_count=100, finish_max_count=10 ** 6):
         """Generate entrance-exit broken line."""
         N = self.div
         d = self.dim
         max_steps = (N**d // 2) - 1
+
+        # COPY-PASTE :( TODO: use self.next_dict
+        gate_set = set()
+        for bm in BaseMap.gen_base_maps(d):
+            for g in self.gates:
+                gate_set.add(bm * g)
+        gate_list = sorted(gate_set)
+
+        start_init = []
+        finish_init = []
+        for name, point in [('entrance', gate.entrance), ('exit', gate.exit)]:
+            scaled = tuple(xj * FastFraction(N, 1) for xj in point)
+            for cube in self.gen_cubes(scaled):
+                if any(cj < 0 or cj >= N for cj in cube):
+                    continue
+                rel = tuple(sj - FastFraction(cj, 1) for sj, cj in zip(scaled, cube))
+                for g in gate_list:
+                    # here we use that we allow time-rev bms for gate_list
+                    if g.entrance == rel:
+                        path = PathNode(head=cube, prev=None, len=1, gate=g)
+                        if name == 'entrance':
+                            start_init.append(path)
+                        else:
+                            finish_init.append(path)
+
+
         start_st = time.time()
-        start_paths = self.width_search(self.start_init, max_steps=max_steps, max_count=start_max_count)
+        start_paths = self.width_search(start_init, max_steps=max_steps, max_count=start_max_count)
         if not start_paths:
             return
 
@@ -279,7 +354,7 @@ class PathsGenerator:
         logging.info('start: width: %d, configurations: %d', start_paths[0].len - 1, len(start))
 
         finish_st = time.time()
-        finish_paths = self.width_search(self.finish_init, max_steps=max_steps, max_count=finish_max_count, reverse=True)
+        finish_paths = self.width_search(finish_init, max_steps=max_steps, max_count=finish_max_count)
         if not finish_paths:
             return
         
@@ -287,7 +362,7 @@ class PathsGenerator:
         all_cubes = set(itertools.product(range(N), repeat=d))
         for path in finish_paths:
             complement_cubeset = all_cubes - path.support()
-            complement_state = (frozenset(complement_cubeset), path.head, path.exit, path.entrance)
+            complement_state = (frozenset(complement_cubeset), path.head, path.gate.reversed())
             pid = hash(complement_state)
             finish.setdefault(pid, []).append(path)
         finish_width = finish_paths[0].len - 1
@@ -342,7 +417,7 @@ class PathsGenerator:
     @staticmethod
     def glue_paths(start, mid, fin):
         # сначала проверим, что fin корректно соотносится с mid
-        if mid.head != fin.head or mid.entrance != fin.exit or mid.exit != fin.entrance:
+        if mid.head != fin.head or mid.gate != fin.gate.reversed():
             return
         fin_past = fin.support() - set([fin.head])
         mid_past = mid.support() - set([mid.head])
@@ -353,7 +428,7 @@ class PathsGenerator:
         mid_data = mid.get_data()
         fin_data = fin.get_data()
         rev_fin_data = []
-        for cube, entrance, exit in reversed(fin_data):
-            rev_fin_data.append((cube, exit, entrance))
+        for cube, gate in reversed(fin_data):
+            rev_fin_data.append((cube, gate.reversed()))
 
         return start_data + mid_data[start.len:] + rev_fin_data[1:]

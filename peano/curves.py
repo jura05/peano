@@ -4,41 +4,10 @@ import itertools
 from .fast_fractions import FastFraction
 from .base_maps import BaseMap, Spec
 from .utils import get_periodic_sum
-
-
-class Proto:
-    """Curve prototype -- sequence of cubes."""
-    def __init__(self, dim, div, cubes):
-        self.dim = dim
-        self.div = div
-        self._cubes = tuple(tuple(cube) for cube in cubes)
-
-    def __iter__(self):
-        return iter(self._cubes)
-
-    def __getitem__(self, idx):
-        return self._cubes[idx]
-
-    def __len__(self):
-        return len(self._cubes)
-
-    def __eq__(self, other):
-        return self._cubes == other._cubes
-
-    def __hash__(self):
-        return hash(self._cubes)
-
-    def __rmul__(self, base_map):
-        if not isinstance(base_map, BaseMap):
-            return NotImplemented
-        cubes = [base_map.apply_cube(self.div, cube) for cube in self._cubes]
-        if base_map.time_rev:
-            cubes = reversed(cubes)
-        return type(self)(self.dim, self.div, cubes)
+from .paths import Proto, CurvePath, Gate
 
 
 Pattern = namedtuple('Pattern', ['proto', 'specs'])
-
 
 
 class FuzzyCurve:
@@ -234,6 +203,65 @@ class FuzzyCurve:
         return self.changed(patterns=new_patterns)
 
     #
+    # Entrance/exit - defined if beg/end proto/specs are defined
+    #
+
+    def get_entrance(self, pnum=None):
+        """
+        Entrance of a curve, i.e. point f(0).
+
+        If pnum is set, find the entrance of pattern pnum.
+        """
+        if pnum is None:
+            pnum = self.pnum
+        start, period = self._get_cubes(pnum, 0)
+        return self._get_cube_limit(start, period)
+
+    def get_exit(self, pnum=None):
+        """
+        Exit of a curve, i.e. point f(1).
+
+        If pnum is set, find the entrance of pattern pnum.
+        """
+        if pnum is None:
+            pnum = self.pnum
+        start, period = self._get_cubes(pnum, self.genus-1)
+        return self._get_cube_limit(start, period)
+
+    def _get_cubes(self, pnum, cnum):
+        # we found the sequence of cubes that we obtain if we take cube #cnum in each fraction
+        # returns pair (non-periodic part, periodic part)
+        # возвращает пару (непериодическая часть, периодическая часть)
+        cur_spec = Spec(base_map=BaseMap.id_map(self.dim), pnum=pnum)  # current curve = cur_spec * self
+        cubes = []
+        index = {}
+
+        while True:
+            cur_curve = cur_spec * self
+            if cur_curve.proto[cnum] is None or cur_curve.specs[cnum] is None:
+                raise Exception("Curve not specified enough to get cubes sequence!")
+            cube = cur_curve.proto[cnum]
+
+            cubes.append(cube)
+            index[cur_spec] = len(cubes)-1
+
+            cur_spec = cur_curve.specs[cnum] * cur_spec
+
+            if cur_spec in index:
+                idx = index[cur_spec]
+                return cubes[0:idx], cubes[idx:]
+
+    def _get_cube_limit(self, start, period):
+        # дана последовательность кубов, периодическая с некоторого момента, ищем предельную точку
+        """Get limit of sequence of nested cubes."""
+        p = [0] * self.dim
+        for j in range(self.dim):
+            start_j = [x[j] for x in start]
+            period_j = [x[j] for x in period]
+            p[j] = get_periodic_sum(start_j, period_j, self.div)
+        return tuple(p)
+
+    #
     # Junctions; see also the class Junction
     #
 
@@ -355,59 +383,6 @@ class Curve(FuzzyCurve):
     This curve defines the continuous surjective map f:[0,1]->[0,1]^d.
     """
 
-    def get_entrance(self, pnum=None):
-        """
-        Entrance of a curve, i.e. point f(0).
-
-        If pnum is set, find the entrance of pattern pnum.
-        """
-        if pnum is None:
-            pnum = self.pnum
-        start, period = self._get_cubes(pnum, 0)
-        return self._get_cube_limit(start, period)
-
-    def get_exit(self, pnum=None):
-        """
-        Exit of a curve, i.e. point f(1).
-
-        If pnum is set, find the entrance of pattern pnum.
-        """
-        if pnum is None:
-            pnum = self.pnum
-        start, period = self._get_cubes(pnum, self.genus-1)
-        return self._get_cube_limit(start, period)
-
-    def _get_cubes(self, pnum, cnum):
-        # we found the sequence of cubes that we obtain if we take cube #cnum in each fraction
-        # returns pair (non-periodic part, periodic part)
-        # возвращает пару (непериодическая часть, периодическая часть)
-        cur_spec = Spec(base_map=BaseMap.id_map(self.dim), pnum=pnum)  # current curve = cur_spec * self
-        cubes = []
-        index = {}
-
-        while True:
-            cur_curve = cur_spec * self
-            cube = cur_curve.proto[cnum]
-
-            cubes.append(cube)
-            index[cur_spec] = len(cubes)-1
-
-            cur_spec = cur_curve.specs[cnum] * cur_spec
-
-            if cur_spec in index:
-                idx = index[cur_spec]
-                return cubes[0:idx], cubes[idx:]
-
-    def _get_cube_limit(self, start, period):
-        # дана последовательность кубов, периодическая с некоторого момента, ищем предельную точку
-        """Get limit of sequence of nested cubes."""
-        p = [0] * self.dim
-        for j in range(self.dim):
-            start_j = [x[j] for x in start]
-            period_j = [x[j] for x in period]
-            p[j] = get_periodic_sum(start_j, period_j, self.div)
-        return tuple(p)
-
     def gen_base_junctions(self):
         """Generate base junctions."""
         seen = set()
@@ -425,34 +400,19 @@ class Curve(FuzzyCurve):
     def gen_allowed_specs(self, pnum, cnum):
         yield self.patterns[pnum].specs[cnum]
 
-    # TODO: TEST FUZZY POLY CURVE!!!
+    def get_paths(self):
+        # TODO: unite with check
+        P = self.pattern_count
+        gates = {pnum: Gate(self.get_entrance(pnum), self.get_exit(pnum)) for pnum in range(P)}
+        paths = []
+        for pnum, pattern in enumerate(self.patterns):
+            pattern_gates = [spec.base_map * gates[spec.pnum] for spec in pattern.specs]
+            paths.append(CurvePath(pattern.proto, pattern_gates))
+        return paths
+
     def forget(self, allow_time_rev=False):
         """Convert curve to a fuzzy curve, saving entrance/exit and forgetting all specs."""
-        patterns = []
-        patterns_symm = []
-
-        for pnum, pattern in enumerate(self.patterns):
-            entr = self.get_entrance(pnum)
-            exit = self.get_exit(pnum)
-
-            symmetries = []
-            for bm in BaseMap.gen_constraint_cube_maps(self.dim, {entr: entr, exit: exit}):
-                symmetries.append(bm)
-                
-            if allow_time_rev:
-                for bm in BaseMap.gen_constraint_cube_maps(self.dim, {entr: exit, exit: entr}):
-                    symmetries.append(bm.reversed_time())
-
-            repr_specs = pattern.specs  # now old specs are only representatives
-            patterns_symm.append((repr_specs, symmetries))
-            patterns.append((pattern.proto, [None] * self.genus))  # forget about old specs!
-
-        return SymmFuzzyCurve(
-            dim=self.dim,
-            div=self.div,
-            patterns=patterns,
-            patterns_symm=patterns_symm,
-        )
+        return PathFuzzyCurve.init_from_paths(self.get_paths(), allow_time_rev=allow_time_rev)
 
     def get_vertex_moments(self, pnum=None):
         """Get dict {vertex: first_visit_time}."""
@@ -619,79 +579,139 @@ class Curve(FuzzyCurve):
                     raise Exception(msg)
 
 
-class SymmFuzzyCurve(FuzzyCurve):
+class PathFuzzyCurve(FuzzyCurve):
     """
-    Fuzzy curve with a group of symmetry acting on each fraction.
+    Fuzzy curve with fixed paths.
 
-    .patterns_symm -  list of pairs (repr_specs, symmetries) for each pattern
-        repr_specs -  list of left coset representatives of specs for each fraction of pattern
-        symmetries -  symmetries (base_maps) subgroup
+    Additional attributes:
+    Information about "standard" gates used in paths:
+    .gates_symmetries  --  dict {std_gate: symmetries} - list of bms that save std_gate (doest not change at *)
+    .gates_std  --  dict {std_gate: {pnum: std_map}}, such that std_map * pattern_global_gate = std_gate
+
+    Information about patterns:
+    .pattern_gates  --  array of std_gates for each fraction of each pattern;
+    .pattern_reprs  --  array of reprs for each pattern; reprs[cnum] = bm that sends std_gate to gate of fraction
     """
 
     def __init__(self, *args, **kwargs):
-        patterns_symm = kwargs.pop('patterns_symm')
+        gates_symmetries = kwargs.pop('gates_symmetries')
+        gates_std = kwargs.pop('gates_std')
+        pattern_gates = kwargs.pop('pattern_gates')
+        pattern_reprs = kwargs.pop('pattern_reprs')
         super().__init__(*args, **kwargs)
-        self.patterns_symm = tuple(patterns_symm)
+        self.gates_symmetries = gates_symmetries
+        self.gates_std = gates_std
+        self.pattern_gates = pattern_gates
+        self.pattern_reprs = pattern_reprs
 
     def changed(self, *args, **kwargs):
-        if 'patterns_symm' not in kwargs:
-            kwargs['patterns_symm'] = self.patterns_symm
+        for add_field in ['gates_symmetries', 'gates_std', 'pattern_gates', 'pattern_reprs']:
+            if add_field not in kwargs:
+                kwargs[add_field] = getattr(self, add_field)
         return super().changed(*args, **kwargs)
 
     def reversed(self):
-        new_patterns_symm = []
-        for repr_specs, symmetries in self.patterns_symm:
-            new_patterns_symm.append((tuple(reversed(repr_specs)), symmetries))
-        return super().reversed().changed(patterns_symm=new_patterns_symm)
+        # we do not change gates to keep them standard (symmetries also do not change)
+        new_gates_std = {}
+        for gate, data in self.gates_std.items():
+            new_gates_std[gate] = {pnum: std_map.reversed_time() for pnum, std_map in data.items()}
+
+        new_pattern_gates = [list(reversed(gates)) for gates in self.pattern_gates]
+        new_pattern_reprs = []
+        for reprs in self.pattern_reprs:
+            new_reprs = list(reversed([bm.reversed_time() for bm in reprs]))
+            new_pattern_reprs.append(new_reprs)
+        return super().reversed().changed(
+            gates_std=new_gates_std,
+            pattern_gates=new_pattern_gates,
+            pattern_reprs=new_pattern_reprs,
+        )
 
     def apply_cube_map(self, cube_map):
         curve = super().apply_cube_map(cube_map)
+        new_gates_std = {}
+        for gate, data in self.gates_std.items():
+            new_gates_std[gate] = {pnum: std_map * ~cube_map for pnum, std_map in data.items()}
 
-        new_patterns_symm = []
-        for repr_specs, symmetries in curve.patterns_symm:
-            new_repr_specs = [sp.conjugate_by(cube_map) for sp in repr_specs]
-            new_symmetries = [bm.conjugate_by(cube_map) for bm in symmetries]
-            new_patterns_symm.append((tuple(new_repr_specs), new_symmetries))
+        new_pattern_reprs = []
+        for reprs in self.pattern_reprs:
+            new_reprs = [cube_map * repr for repr in reprs]
+            new_pattern_reprs.append(new_reprs)
 
-        return curve.changed(patterns_symm=new_patterns_symm)
+        return curve.changed(
+            gates_std=new_gates_std,
+            pattern_reprs=new_pattern_reprs,
+        )
 
     def gen_allowed_specs(self, pnum, cnum):
         pattern = self.patterns[pnum]
         if pattern.specs[cnum] is not None:
-            # базовое преобразование уже определено!
             yield pattern.specs[cnum]
             return
 
-        repr_spec = self.patterns_symm[pnum][0][cnum]
-        symmetries = self.patterns_symm[repr_spec.pnum][1]  # Note! the symmetries for the other pattern
-        for symm in symmetries:
-            yield repr_spec * symm
+        gate = self.pattern_gates[pnum][cnum]
+        repr = self.pattern_reprs[pnum][cnum]
+        symmetries = self.gates_symmetries[gate]
+        std = self.gates_std[gate]
+        for pnum in sorted(std.keys()):
+            for symm in symmetries:
+                # how go we get fraction from a pattern:
+                # 1) map pattern gate to std_gate
+                # 2) apply symmetries for std_gate
+                # 3) apply repr to get fraction gate
+                yield Spec(repr * symm * std[pnum], pnum)
 
     @classmethod
-    def init_from_path(cls, dim, div, path, allow_time_rev):
-        proto = path.proto
-        entr, exit = path.entrance, path.exit
-
-        symmetries = []
-        for bm in BaseMap.gen_constraint_cube_maps(dim, {entr: entr, exit: exit}):
-            symmetries.append(bm)
+    def init_from_paths(cls, paths, allow_time_rev=True):
+        dim = paths[0].dim
+        div = paths[0].div
         if allow_time_rev:
-            for bm in BaseMap.gen_constraint_cube_maps(dim, {entr: exit, exit: entr}):
-                symmetries.append(bm.reversed_time())
+            possible_maps = list(BaseMap.gen_base_maps(dim))
+        else:
+            possible_maps = list(BaseMap.gen_base_maps(dim, time_rev=False))
+        gates_symmetries = {}
+        gates_std = {}
+        for pnum, path in enumerate(paths):
+            # pnum stands for path_num and also pattern_num
+            std_gate = path.gate.std()
+            std_map = next(bm for bm in possible_maps if bm * path.gate == std_gate)
+            gates_std.setdefault(std_gate, {})[pnum] = std_map
 
-        specs = [None] * len(proto)
-        repr_specs = [None] * len(proto)
+        for gate in gates_std:
+            gates_symmetries[gate] = [bm for bm in possible_maps if bm * gate == gate]
 
-        for cnum, gate in enumerate(path.gates):
-            rel_entr, rel_exit = gate
-            rel_entr = tuple(FastFraction(xj, 1) if isinstance(xj, int) else xj for xj in rel_entr)
-            rel_exit = tuple(FastFraction(xj, 1) if isinstance(xj, int) else xj for xj in rel_exit)
-            repr_specs[cnum] = Spec(next(BaseMap.gen_constraint_cube_maps(dim, {entr: rel_entr, exit: rel_exit})))
+        patterns = []
+        pattern_gates = []
+        pattern_reprs = []
+        for pnum, path in enumerate(paths):
+            proto = path.proto
+            specs = [None] * len(proto)  # nothing is defined
+            patterns.append((proto, specs))
+
+            reprs = []
+            gates = []
+            for gate in path.gates:
+                repr0, gate0 = None, None
+                for std_gate in gates_std:
+                    allowed = [bm for bm in possible_maps if bm * std_gate == gate]
+                    if allowed:
+                        # should be exactly once!
+                        repr0 = allowed[0]
+                        gate0 = std_gate
+                        break
+                if repr0 is None or gate0 is None:
+                    raise Exception("Can't create PathFuzzyCurve: no allowed gates")
+                reprs.append(repr0)
+                gates.append(gate0)
+            pattern_reprs.append(reprs)
+            pattern_gates.append(gates)
 
         return cls(
-            dim=dim, div=div,
-            patterns=[(proto, specs)],
-            patterns_symm=[(repr_specs, symmetries)],
+            dim=dim, div=div, patterns=patterns,
+            gates_symmetries=gates_symmetries,
+            gates_std=gates_std,
+            pattern_gates=pattern_gates,
+            pattern_reprs=pattern_reprs,
         )
 
 

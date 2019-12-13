@@ -4,7 +4,7 @@ from peano.fast_fractions import FastFraction
 from peano.examples import *
 from peano import utils
 from peano.paths import PathsGenerator
-from peano.curves import SymmFuzzyCurve, Proto
+from peano.curves import PathFuzzyCurve, Proto
 from peano.ratio import Estimator
 
 
@@ -125,6 +125,8 @@ class TestCurve(unittest.TestCase):
             (3, 4), (4, 4), (4, 3), (3, 3), (3, 2),
             (4, 2), (4, 1), (3, 1), (3, 0), (4, 0),
         ])
+        # in new version we have (0,0)->(0,1) gate
+        good_proto = BaseMap.from_basis('ji') * good_proto
 
         paths_gen = PathsGenerator(dim=2, div=5, hdist=1, max_cdist=1, verbose=1)
         for path in paths_gen.generate_paths():
@@ -132,7 +134,7 @@ class TestCurve(unittest.TestCase):
                 path0 = path
                 break
 
-        pcurve = SymmFuzzyCurve.init_from_path(2, 5, path0, allow_time_rev=True)
+        pcurve = PathFuzzyCurve.init_from_paths([path0])
         estimator = Estimator(utils.ratio_l2_squared)
         curve = estimator.estimate_ratio(pcurve, rel_tol_inv=10000, verbose=False)['curve']
         ratio = estimator.estimate_ratio(curve, rel_tol_inv=10000, use_vertex_brkline=True, verbose=False)
