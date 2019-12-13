@@ -7,9 +7,9 @@ import pickle
 import logging
 
 from peano import utils
-from peano.paths import PathsGenerator, gen_uniq
+from peano.paths import PathsGenerator, gen_uniq, Gate
 from peano.ratio import Estimator
-from peano.curves import SymmFuzzyCurve
+from peano.curves import PathFuzzyCurve
 from peano.fast_fractions import FastFraction
 
 
@@ -26,10 +26,10 @@ def perebor(conf, idx=None):
     }
     ratio_func = funcs[conf['ratio_func_name']]
     dim, div = conf['dim'], conf['div']
-    paths_gen = PathsGenerator(dim=dim, div=div, hdist=conf['hdist'], max_cdist=conf['max_cdist'])
+    paths_gen = PathsGenerator(dim=dim, div=div, hdist=conf.get('hdist'), gate=conf.get('gate'), max_cdist=conf['max_cdist'])
     paths = list(paths_gen.generate_paths())
     logging.warning('paths: %d', len(paths))
-    uniq_paths = list(gen_uniq(dim, paths))
+    uniq_paths = list(gen_uniq(paths))
 
     if idx is not None:
         logging.warning('uniq paths idx: %d:%d', idx[0], idx[1])
@@ -43,19 +43,14 @@ def perebor(conf, idx=None):
     path_ratio = {path: estimator.estimate_path(path) for path in uniq_paths}
     uniq_paths.sort(key=lambda path: path_ratio[path])
 
-    pcurves = (SymmFuzzyCurve.init_from_path(dim, div, path, allow_time_rev=True) for path in uniq_paths)
-    try:
-        res = estimator.estimate_ratio_sequence(
-            pcurves,
-            rel_tol_inv=conf['rel_tol_inv'],
-            rel_tol_inv_mult=conf.get('rel_tol_inv_mult', 2),
-            sat_strategy={'type': 'geometric', 'multiplier': 1.3},
-            upper_bound=conf.get('upper_bound'),
-        )
-    except Exception:
-        logging.error('ZOPA!!!')
-        logging.warning('CONF: %s', conf)
-        return
+    pcurves = (PathFuzzyCurve.init_from_paths(dim, div, [path]) for path in uniq_paths)
+    res = estimator.estimate_ratio_sequence(
+        pcurves,
+        rel_tol_inv=conf['rel_tol_inv'],
+        rel_tol_inv_mult=conf.get('rel_tol_inv_mult', 2),
+        sat_strategy={'type': 'geometric', 'multiplier': 1.3},
+        upper_bound=conf.get('upper_bound'),
+    )
 
     logging.warning('CONF: %s', conf)
     logging.warning('FINAL BOUNDS: %.6f <= r <= %.6f', res['lo'], res['up'])
@@ -63,34 +58,29 @@ def perebor(conf, idx=None):
     print(res)
 
 
-def perebor_basic():
-    configs = []
-    for name in ['l1', 'l2', 'linf']:
-        conf = {
-            "dim": 2,
-            "div": 6,
-            "hdist": 1,
-            "max_cdist": 1,
-            "ratio_func_name": name,
-            "rel_tol_inv": 1000,
-            "rel_tol_inv_mult": 10
-        }
-        configs.append(conf)
-
-    for conf in configs:
-        perebor(conf)
-    logging.warning('======')
-
-
 if __name__ == "__main__":
-    argparser = argparse.ArgumentParser()
-    argparser.add_argument('config')
-    argparser.add_argument('--begin', type=int)
-    argparser.add_argument('--end', type=int)
-    args = argparser.parse_args()
-    with open(args.config) as fh:
-        config = json.load(fh)
+    #argparser = argparse.ArgumentParser()
+    #argparser.add_argument('config')
+    #argparser.add_argument('--begin', type=int)
+    #argparser.add_argument('--end', type=int)
+    #args = argparser.parse_args()
+    #with open(args.config) as fh:
+    #    config = json.load(fh)
 
-    config['upper_bound'] = FastFraction(559, 100)
+    #config['upper_bound'] = FastFraction(559, 100)
 
-    perebor(config, [args.begin, args.end])
+    config = {
+        "dim": 3,
+        "div": 2,
+        "gate": Gate(
+            entrance=(FastFraction(0,1), FastFraction(0,1), FastFraction(0,1)),
+            exit=(FastFraction(0,1), FastFraction(1,1), FastFraction(1,1)),
+        ),
+        "max_cdist": None,
+        "ratio_func_name": "linf",
+        "rel_tol_inv": 100000,
+        "rel_tol_inv_mult": 10
+    }
+
+    perebor(config)
+    #perebor(config, [args.begin, args.end])

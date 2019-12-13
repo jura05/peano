@@ -103,11 +103,11 @@ class CurvePath:
         return BaseMap.id_map(self.proto.dim).reversed_time() * self
 
 
-def gen_uniq(dim, paths):
+def gen_uniq(paths):
     seen = set()
     for path in paths:
         entr, exit = path.gate
-        bms = list(BaseMap.gen_constraint_cube_maps(dim, {entr: entr, exit: exit}))
+        bms = list(BaseMap.gen_constraint_cube_maps(path.dim, {entr: entr, exit: exit}))
         bms += [bm.reversed_time() for bm in BaseMap.gen_constraint_cube_maps(dim, {entr: exit, exit: entr})]
         if any(bm * path in seen for bm in bms):
             continue
