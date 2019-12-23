@@ -321,7 +321,9 @@ class PathsGenerator:
 
         seen = set()
         uniq_gates = sorted(set(self.gates))
-        for paths in self._generate_paths(**kwargs):
+        for cnt, paths in enumerate(self._generate_paths(**kwargs)):
+            if cnt % 1000 == 0:
+                logging.info('got paths: %d, uniq: %d', cnt + 1, len(seen))
             gate_paths = {gate: [] for gate in uniq_gates}
             for path in paths:
                 gate_paths[path.gate].append(path)
@@ -346,7 +348,11 @@ class PathsGenerator:
                 yield (path,)
         else:
             # here we consume all possible paths into memory - this is required for product
-            path_lists = [list(self.generate_paths_generic(gate, **kwargs)) for gate in self.gates]
+            gate2list = {}
+            for gate in sorted(set(self.gates)):
+                gate2list[gate] = list(self.generate_paths_generic(gate, **kwargs))
+            path_lists = [gate2list[gate] for gate in self.gates]
+            logging.info('paths counts for each gate: %s', [len(lst) for lst in path_lists])
             yield from itertools.product(*path_lists)
 
     def generate_paths_generic(self, gate, start_max_count=100, finish_max_count=10 ** 6):

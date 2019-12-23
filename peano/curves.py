@@ -936,9 +936,9 @@ def gen_possible_gates(dim, div, pattern_count):
             iter_no += 1
             if iter_no % 1000 == 0:
                 logging.warning(
-                    'cube_pairs %d/%d, var0: %d/%d, boundary: %d, gates: seen: %d, good: %d',
+                    'cube_pairs %d/%d, word (base %d): %s, boundary: %d, gates: seen: %d, good: %d',
                     p_no + 1, len(std_pairs_list),
-                    word[0] + 1, wbase,
+                    wbase, word,
                     iter_no, len(seen_gates), good_count,
                 )
 
