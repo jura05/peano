@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# coding: UTF-8
 
 import argparse
 import json
@@ -73,6 +72,9 @@ def perebor(conf, idx=None):
     logging.warning('CONF: %s', conf)
     logging.warning('FINAL BOUNDS: %.6f <= r <= %.6f', res['lo'], res['up'])
     res['paths_count'] = len(paths_list)
+    res['lo_float'] = float(res['lo'])
+    res['up_float'] = float(res['up'])
+    print(conf)
     print(res)
 
 
@@ -85,5 +87,4 @@ if __name__ == "__main__":
     with open(args.config) as fh:
         config = json.load(fh)
 
-    #config['upper_bound'] = FastFraction(559, 100)
     perebor(config)
