@@ -11,6 +11,7 @@ from peano.ratio import Estimator
 
 def meta_perebor(dim, div, pattern_count, ratio_func, rel_tol_inv, rel_tol_inv_mult):
     estimator = Estimator(ratio_func, cache_max_size=2**16)
+    result = {}
     for gates in gen_possible_gates(dim=dim, div=div, pattern_count=pattern_count):
         paths_gen = PathsGenerator(dim=dim, div=div, gates=gates)
         paths_list = list(paths_gen.generate_paths(uniq=True))
@@ -23,10 +24,15 @@ def meta_perebor(dim, div, pattern_count, ratio_func, rel_tol_inv, rel_tol_inv_m
             rel_tol_inv_mult=rel_tol_inv_mult,
             sat_strategy={'type': 'geometric', 'multiplier': 1.3},
         )
+        result[tuple(gates)] = {'paths': paths_list, 'estimate': res}
+
+    for gates in sorted(result.keys()):
+        gates_result = result[gates]
         print('Result for gates:', [str(g) for g in gates])
-        print('paths:', len(paths_list))
-        print('lower bound:', float(res['lo']))
-        print('upper bound:', float(res['up']))
+        print('paths:', len(gates_result['paths']))
+        print('lower bound:', float(gates_result['estimate']['lo']))
+        print('upper bound:', float(gates_result['estimate']['up']))
+        print('')
 
 
 if __name__ == "__main__":
@@ -44,6 +50,7 @@ if __name__ == "__main__":
         'l2_squared': utils.ratio_l2_squared,
         'linf': utils.ratio_linf,
     }
+    print('args:', args)
     meta_perebor(
         dim=args.dim, div=args.div, pattern_count=args.pattern_count, ratio_func=funcs[args.metric],
         rel_tol_inv=args.rel_tol_inv, rel_tol_inv_mult=args.rel_tol_inv_mult,
