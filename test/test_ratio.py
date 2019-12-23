@@ -113,10 +113,6 @@ class TestCurve(unittest.TestCase):
                 assert float(res['up']) <= ratio_up, 'metric {} up failed: {} > {}'.format(metric, res['up'], ratio_up)
                 assert float(res['lo']) >= ratio_lo, 'metric {} lo failed: {} < {}'.format(metric, res['lo'], ratio_lo)
 
-    #def test_pcurve_ratio(self):
-    #    pcurve = get_peano5_curve().forget(allow_time_rev=True)
-    #    assert pcurve.test_ratio(utils.ratio_l2_squared, lower_bound=FastFraction(90, 1), upper_bound=FastFraction(100, 1))
-
     def test_55_ratio(self):
         good_proto = Proto(dim=2, div=5, cubes=[
             (0, 0), (0, 1), (1, 1), (1, 0), (2, 0),
@@ -129,9 +125,9 @@ class TestCurve(unittest.TestCase):
         good_proto = BaseMap.from_basis('ji') * good_proto
 
         paths_gen = PathsGenerator(dim=2, div=5, hdist=1, max_cdist=1, verbose=1)
-        for path in paths_gen.generate_paths():
-            if path.proto == good_proto:
-                path0 = path
+        for paths in paths_gen.generate_paths():
+            if paths[0].proto == good_proto:
+                path0 = paths[0]
                 break
 
         pcurve = PathFuzzyCurve.init_from_paths([path0])

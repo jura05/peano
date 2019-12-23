@@ -22,7 +22,7 @@ logging.basicConfig(level=0, stream=sys.stdout, format='[%(process)d] %(asctime)
 
 def main():
     curve_gen = paths.PathsGenerator(dim=2, div=5, hdist=1, max_cdist=1, verbose=1)
-    pcurves = list(PathFuzzyCurve.init_from_paths([path]) for path in paths.gen_uniq(curve_gen.generate_paths()))
+    pcurves = list(PathFuzzyCurve.init_from_paths([path]) for path in curve_gen.generate_paths(uniq=True))
     estimator = Estimator(ratio_l2_squared)
     res = estimator.estimate_ratio_sequence(
         pcurves, rel_tol_inv=1000000, rel_tol_inv_mult=2, sat_strategy={'type': 'geometric', 'multiplier': 1.5},

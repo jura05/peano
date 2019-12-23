@@ -1,10 +1,12 @@
 from collections import namedtuple
+from functools import lru_cache
 import itertools
+import logging
 
 from .fast_fractions import FastFraction
 from .base_maps import BaseMap, Spec
-from .utils import get_periodic_sum
-from .paths import Proto, CurvePath, Gate
+from .utils import get_periodic_sum, gen_words
+from .paths import Proto, CurvePath, Gate, PathsGenerator
 
 
 Pattern = namedtuple('Pattern', ['proto', 'specs'])
@@ -133,7 +135,9 @@ class FuzzyCurve:
         active_pattern = self.patterns[spec.pnum]
         active_cnum = spec.base_map.apply_cnum(self.genus, cnum)
         last_spec = active_pattern.specs[active_cnum]
-        return spec.base_map * last_spec * ~spec.base_map * spec
+        if last_spec is None:
+            raise KeyError
+        return spec.base_map * last_spec
 
     def gen_allowed_specs(self, pnum, cnum):
         raise NotImplementedError("Define in child class")
@@ -179,15 +183,16 @@ class FuzzyCurve:
                 return False
         return True
 
-    def specify(self, pnum, cnum, spec):
+    def specify(self, pnum, cnum, spec, force=False):
         """
         Check that we can set specs to spec at pnum, cnum, and return specified curve if so.
 
         This is the main method while dividing pairs_tree in estimators,
         so the efficiency is important here!
         """
-        if spec not in self.gen_allowed_specs(pnum, cnum):
-            raise Exception("Can't specify curve")
+        if not force:
+            if spec not in self.gen_allowed_specs(pnum, cnum):
+                raise Exception("Can't specify curve")
 
         pattern = self.patterns[pnum]
         if pattern.specs[cnum] is not None:
@@ -237,15 +242,17 @@ class FuzzyCurve:
         index = {}
 
         while True:
-            cur_curve = cur_spec * self
-            if cur_curve.proto[cnum] is None or cur_curve.specs[cnum] is None:
+            #cur_curve = cur_spec * self
+            cur_curve_proto = cur_spec.base_map * self.patterns[cur_spec.pnum].proto
+            if cur_curve_proto[cnum] is None:
                 raise Exception("Curve not specified enough to get cubes sequence!")
-            cube = cur_curve.proto[cnum]
+            cube = cur_curve_proto[cnum]
 
             cubes.append(cube)
             index[cur_spec] = len(cubes)-1
 
-            cur_spec = cur_curve.specs[cnum] * cur_spec
+            #cur_spec = cur_curve.specs[cnum] * cur_spec
+            cur_spec = self.compose_spec(cur_spec, cnum)
 
             if cur_spec in index:
                 idx = index[cur_spec]
@@ -260,6 +267,59 @@ class FuzzyCurve:
             period_j = [x[j] for x in period]
             p[j] = get_periodic_sum(start_j, period_j, self.div)
         return tuple(p)
+
+    def is_internal(self):
+        """Check that curve has entrance/exit inside cube.
+
+        Returns True is so, False if all gates are on the cube boundary, None if can't decide.
+        """
+
+        result = False
+        dim = self.dim
+        N = self.div
+        genus = self.genus
+        id_map = BaseMap.id_map(dim)
+        all_edges_list = [(j, 0) for j in range(dim)] + [(j, 1) for j in range(dim)]
+
+        for pnum in range(self.pattern_count):
+            start_spec = Spec(base_map=id_map, pnum=pnum)
+            for cnum in [0, genus-1]:
+                if self.patterns[pnum].specs[cnum] is None:
+                    continue
+
+                # code from _get_cubes :( but faster!!!
+                cur_spec = start_spec  # current curve = cur_spec * self
+                seen = set()
+
+                # limit should be on some edge, store possible edges
+                possible_edges = set(all_edges_list)
+
+                while True:
+                    active_cnum = self.genus-1-cnum if cur_spec.base_map.time_rev else cnum
+                    proto = self.patterns[cur_spec.pnum].proto
+                    if proto[active_cnum] is None:
+                        raise Exception("Curve not specified enough to get cubes sequence!")
+                    cube = cur_spec.base_map.apply_cube(self.div, proto[active_cnum])
+
+                    for j in range(dim):
+                        if cube[j] != 0:
+                            possible_edges.discard((j, 0))
+                        if cube[j] != N-1:
+                            possible_edges.discard((j, 1))
+
+                    if not possible_edges:
+                        return True
+
+                    try:
+                        cur_spec = self.compose_spec(cur_spec, cnum)
+                    except KeyError:
+                        result = None
+                        break
+                    if cur_spec in seen:
+                        break  # OK
+                    seen.add(cur_spec)
+
+        return result
 
     #
     # Junctions; see also the class Junction
@@ -777,3 +837,123 @@ class Junction:
 
     def __repr__(self):
         return '{} | dx={}, dt={} | {}'.format(self.spec1, self.delta_x, self.delta_t, self.spec2)
+
+
+def gen_possible_gates(dim, div, pattern_count):
+    """
+    Generate all gates such that there is at least one path with thems.
+
+    We consider only non-internal curves, i.e., curves with all gates on cube boundary.
+    Indeed, if curve in internal, then only internal curves can "use" it,
+    and non-internal curves use each other and have lower ratio.
+
+    All objects are standartized: obj -> std(obj) = min(bm * obj for bm in base_maps).
+    """
+
+    genus = div**dim
+
+    # curves are non-internal, so first and last cubes are on the boundary
+    all_cubes = itertools.product(range(div), repeat=dim)
+    edge_cubes = (cube for cube in all_cubes if any(cj == 0 or cj == div - 1 for cj in cube))
+    edge_pairs = itertools.combinations(edge_cubes, 2)
+
+    def std_pair(pair):
+        def gen_all():
+            for bm in BaseMap.gen_base_maps(dim, time_rev=False):
+                c1 = bm.apply_cube(div, pair[0])
+                c2 = bm.apply_cube(div, pair[1])
+                yield (c1, c2)
+                yield (c2, c1)
+        return min(gen_all())
+
+    std_pairs = sorted(set(std_pair(pair) for pair in edge_pairs))
+
+    # as base_maps are not defined yet, we can permute pairs (i.e., assume that pairs tuple is sorted)
+    # so we use combinations with replacement instead of product
+    std_pairs_list = list(itertools.combinations_with_replacement(std_pairs, r=pattern_count))
+    logging.info('edge_cube pairs: %d', len(std_pairs_list))
+
+    # we can standartize all found gates, with caching for speedup
+    @lru_cache(maxsize=2**16)
+    def get_std_gate(gate):
+        return gate.std()
+
+    @lru_cache(maxsize=2**16)
+    def get_std_gates(gates):
+        return tuple(sorted(get_std_gate(gate) for gate in gates))
+
+    seen_gates = set()
+
+    # to find gates, we should specify:
+    # * first and last cubes in proto (for each pattern) -- will use std_pairs_list for that
+    # * specs on that cubes -- see below
+    #
+    # with fixed protos, we must test all variants of specs
+    # one may store chosen specs in a "word" - tuple of length wlen and each entry in range(wbase)
+    # here wlen is then number of specs to specify, and wbase is number of variants for each spec
+
+    spec_types = [(pnum, cnum) for pnum in range(pattern_count) for cnum in [0, genus-1]]
+    spec_variants = [Spec(bm, pnum) for bm in BaseMap.gen_base_maps(dim) for pnum in range(pattern_count)]
+    wbase = len(spec_variants)
+    wlen = len(spec_types)
+    logging.info('must specify %d specs with %d variants', wlen, wbase)
+
+    iter_no = 0
+    good_count = 0
+    for p_no, pairs in enumerate(std_pairs_list):
+        protos = []
+        for pair in pairs:
+            proto = [None] * genus
+            proto[0] = pair[0]
+            proto[-1] = pair[-1]
+            protos.append(Proto(dim, div, proto))
+
+        # curve that given word represents
+        def get_word_curve(word):
+            vars = {spec_types[k]: spec_variants[wk] for k, wk in enumerate(word)}
+            pattern_specs = []
+            for pnum in range(pattern_count):
+                specs = [None] * genus
+                pattern_specs.append(specs)
+
+            for spec_type, spec in vars.items():
+                spec_pnum, spec_cnum = spec_type
+                pattern_specs[spec_pnum][spec_cnum] = spec
+
+            patterns = [(proto, specs) for proto, specs in zip(protos, pattern_specs)]
+            return FuzzyCurve(dim=dim, div=div, patterns=patterns)
+
+        def check_word(word):
+            return not get_word_curve(word).is_internal()  # boundary or can't decide
+
+        # ok, now we must check all words; we use the following optimization:
+        # if some specifications (i.e., for first pattern) already forbid that curve is boundary
+        # (i.e., exit of first pattern must be inside cube), then there is no need to
+        # specify other specs; in terms of "words", if some subword is bad, than all words
+        # that extend it are also bad; this logic is implemented in gen_words function
+
+        for word in gen_words(base=wbase, length=wlen, check_func=check_word):
+            iter_no += 1
+            if iter_no % 1000 == 0:
+                logging.warning(
+                    'cube_pairs %d/%d, var0: %d/%d, boundary: %d, gates: seen: %d, good: %d',
+                    p_no + 1, len(std_pairs_list),
+                    word[0] + 1, wbase,
+                    iter_no, len(seen_gates), good_count,
+                )
+
+            curve = get_word_curve(word)
+
+            # the curve is checked, so gates are necessarily on the cube boundary
+            gates = tuple(Gate(curve.get_entrance(pnum), curve.get_exit(pnum)) for pnum in range(pattern_count))
+            std_gates = get_std_gates(gates)
+            if std_gates in seen_gates:
+                continue
+            seen_gates.add(std_gates)
+
+            # check that there is at least one path with given gates
+            pg = PathsGenerator(dim=dim, div=div, gates=std_gates)
+            if pg.get_paths_example(start_max_count=1000, finish_max_count=100000):
+                logging.warning('found gates: %s', [str(g) for g in std_gates])
+                good_count += 1
+                yield std_gates

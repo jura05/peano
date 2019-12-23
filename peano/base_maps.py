@@ -54,11 +54,15 @@ class BaseMap:
         cache[key] = obj
         return obj
 
+    _id_map_cache = {}
     @classmethod
     def id_map(cls, dim):
         """Identity map."""
-        coords = [(k, False) for k in range(dim)]
-        return cls(coords)
+        bm = cls._id_map_cache.get(dim)
+        if bm is None:
+            coords = [(k, False) for k in range(dim)]
+            bm = cls._id_map_cache[dim] = cls(coords)
+        return bm
 
     @classmethod
     def from_basis(cls, basis):

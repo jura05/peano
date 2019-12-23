@@ -2,6 +2,7 @@ import unittest
 
 from peano.examples import *
 from peano.fast_fractions import FastFraction
+from peano.curves import gen_possible_gates
 
 
 class TestCommon(unittest.TestCase):
@@ -184,3 +185,6 @@ class TestFuzzyCurves(unittest.TestCase):
                         continue
                     if any(curve.is_specialization(tmpl) for tmpl in junc_info[junc]):
                         raise Exception("Found consistent curve for wrong junc!")
+
+    def test_gen_gates(self):
+        assert len(list(gen_possible_gates(dim=3, div=2, pattern_count=1))) == 6

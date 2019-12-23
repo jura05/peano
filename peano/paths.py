@@ -29,6 +29,9 @@ class Proto:
     def __len__(self):
         return len(self._cubes)
 
+    def __lt__(self, other):
+        return self._cubes < other._cubes
+
     def __eq__(self, other):
         return self._cubes == other._cubes
 
@@ -62,7 +65,7 @@ class Gate(namedtuple('Gate', ['entrance', 'exit'])):
     def __str__(self):
         entr_str = '(' + ','.join([str(pj) for pj in self.entrance]) + ')'
         exit_str = '(' + ','.join([str(pj) for pj in self.exit]) + ')'
-        return entr_str + '-->' + exit_str
+        return entr_str + '->' + exit_str
 
 
 class CurvePath:
@@ -86,8 +89,11 @@ class CurvePath:
         gates = tuple(d[1] for d in data)
         return cls(proto, gates)
 
+    def __lt__(self, other):
+        return (self.gate, self.proto, self.gates) < (other.gate, other.proto, other.gates)
+
     def __eq__(self, other):
-        return self.proto == other.proto and self.gates == other.gates
+        return self.gates == other.gates and self.proto == other.proto
 
     def __hash__(self):
         return hash((self.proto, self.gates))
@@ -100,19 +106,11 @@ class CurvePath:
         return CurvePath(new_proto, new_gates)
 
     def reversed(self):
-        return BaseMap.id_map(self.proto.dim).reversed_time() * self
+        return BaseMap.id_map(self.dim).reversed_time() * self
 
-
-def gen_uniq(paths):
-    seen = set()
-    for path in paths:
-        entr, exit = path.gate
-        bms = list(BaseMap.gen_constraint_cube_maps(path.dim, {entr: entr, exit: exit}))
-        bms += [bm.reversed_time() for bm in BaseMap.gen_constraint_cube_maps(dim, {entr: exit, exit: entr})]
-        if any(bm * path in seen for bm in bms):
-            continue
-        seen.add(path)
-        yield path
+    def std_keeping_gate(self):
+        bms = [bm for bm in BaseMap.gen_base_maps(self.dim) if bm * self.gate == self.gate]
+        return min(bm * self for bm in bms)
 
 
 class PathNode(namedtuple('PathNode', ['head', 'gate', 'prev', 'len'])):
@@ -184,7 +182,6 @@ class PathsGenerator:
 
         self.gates = gates
         self.next_dict = self.get_next_dict(gates, max_cdist)
-
 
     # point is in R^d, get integer cubes for it
     @staticmethod
@@ -303,13 +300,54 @@ class PathsGenerator:
             logging.info('width_search: step %d, expanded to %d' % (i+1, len(curr_paths)))
         return curr_paths
 
-    def generate_paths(self, **kwargs):
-        #TEMPORORAY
-        yield from self.generate_paths_generic(self.gates[0], **kwargs)
-        return
+    def get_paths_example(self, **kwargs):
+        """Generate one paths tuple."""
+        examples = []
+        for gate in self.gates:
+            example = None
+            for path in self.generate_paths_generic(gate, **kwargs):
+                example = path
+                break
+            if example is None:
+                return None
+            examples.append(example)
+        return examples
 
-        path_lists = [list(self.generate_paths_generic(gate, **kwargs)) for gate in self.gates]
-        yield from itertools.product(*path_lists)
+    def generate_paths(self, uniq=False, **kwargs):
+        """Generate tuples of paths (p_1,..,p_g) for each gate."""
+        if not uniq:
+            yield from self._generate_paths(**kwargs)
+            return
+
+        seen = set()
+        uniq_gates = sorted(set(self.gates))
+        for paths in self._generate_paths(**kwargs):
+            gate_paths = {gate: [] for gate in uniq_gates}
+            for path in paths:
+                gate_paths[path.gate].append(path)
+
+            # path standartization:
+            # * minimize each path keeping gates
+            # * sort in each group of paths with equal gates
+            # (to get better uniq results, provide std gates to PathGenerator)
+            key_list = []
+            for gate in uniq_gates:
+                key_list += sorted(path.std_keeping_gate() for path in gate_paths[gate])
+            key = tuple(key_list)
+            if key not in seen:
+                yield paths
+            seen.add(key)
+
+    def _generate_paths(self, **kwargs):
+        gates = self.gates
+        if len(gates) == 1:
+            # here we can indeed generate paths
+            for path in self.generate_paths_generic(gates[0], **kwargs):
+                yield (path,)
+        else:
+            # here we consume all possible paths into memory - this is required for product
+            path_lists = [list(self.generate_paths_generic(gate, **kwargs)) for gate in self.gates]
+            yield from itertools.product(*path_lists)
 
     def generate_paths_generic(self, gate, start_max_count=100, finish_max_count=10 ** 6):
         """Generate entrance-exit broken line."""
@@ -357,7 +395,7 @@ class PathsGenerator:
         finish_paths = self.width_search(finish_init, max_steps=max_steps, max_count=finish_max_count)
         if not finish_paths:
             return
-        
+
         finish = {}
         all_cubes = set(itertools.product(range(N), repeat=d))
         for path in finish_paths:

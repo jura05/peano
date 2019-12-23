@@ -133,3 +133,53 @@ def get_lcm(iterable):
     for x in iterable:
         lcm = (lcm * x) // math.gcd(lcm, x)
     return lcm
+
+
+def get_next(base, word):
+    idx = len(word) - 1
+    while idx >= 0 and word[idx] == base-1:
+        idx -= 1
+    if idx < 0:
+        return None
+    new_word = word[:idx] + (word[idx] + 1,) + (0,) * (len(word) - idx - 1)
+    return new_word
+
+
+def gen_words(base, length, check_func):
+    """
+    Generate words that satisfy check_func.
+
+    We suppose that check_func is monotone: check_func(subword) is False ==> check_func(word) is False
+    This method is used in curves.gen_possible_gates.
+    """
+
+    start_word = (0,) * length
+    word = start_word
+    while word is not None:
+        # if we got (a,b,c,0,0,0) then c is new so check (a,b,c),(a,b,c,0),(a,b,c,0,0),(a,b,c,0,0,0)
+        # brk_idx = 2 in this case
+        if word == start_word:
+            brk_idx = 0
+        else:
+            brk_idx = len(word) - 1
+            while word[brk_idx] == 0:
+                brk_idx -= 1
+
+        bad_idx = None
+        for idx in range(brk_idx, len(word) + 1):
+            subword = word[:idx]
+            if not check_func(subword):
+                # say, for idx=3 curve (a,b,c,0) is bad, then we can proceed to (a,b,c,1)
+                bad_idx = idx
+                break
+
+        if bad_idx is not None:
+            bad_word = word[:bad_idx]
+            next_bad_word = get_next(base, bad_word)
+            if next_bad_word is None:
+                word = None
+            else:
+                word = next_bad_word + (0,) * (len(word) - bad_idx)
+        else:
+            yield word
+            word = get_next(base, word)
