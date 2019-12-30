@@ -315,13 +315,30 @@ class PathsGenerator:
 
     def generate_paths(self, uniq=False, **kwargs):
         """Generate tuples of paths (p_1,..,p_g) for each gate."""
+        gates = self.gates
+        kwargs['uniq'] = uniq
+
+        if len(gates) == 1:
+            # here we can indeed generate paths
+            for path in self.generate_paths_generic(gates[0], **kwargs):
+                yield (path,)
+            return
+
+        # in other cases we consume all possible paths into memory - this is required for product
+        uniq_gates = sorted(set(self.gates))
+        gate2list = {}
+        for gate in uniq_gates:
+            gate2list[gate] = list(self.generate_paths_generic(gate, **kwargs))
+        path_lists = [gate2list[gate] for gate in self.gates]
+        logging.info('paths counts for each gate: %s', [len(lst) for lst in path_lists])
+
+        result_gen = itertools.product(*path_lists)
         if not uniq:
-            yield from self._generate_paths(**kwargs)
+            yield from result_gen
             return
 
         seen = set()
-        uniq_gates = sorted(set(self.gates))
-        for cnt, paths in enumerate(self._generate_paths(**kwargs)):
+        for cnt, paths in enumerate(result_gen):
             if cnt % 1000 == 0:
                 logging.info('got paths: %d, uniq: %d', cnt + 1, len(seen))
             gate_paths = {gate: [] for gate in uniq_gates}
@@ -329,33 +346,18 @@ class PathsGenerator:
                 gate_paths[path.gate].append(path)
 
             # path standartization:
-            # * minimize each path keeping gates
+            # * minimize each path keeping gates -- done in generic method
             # * sort in each group of paths with equal gates
             # (to get better uniq results, provide std gates to PathGenerator)
             key_list = []
             for gate in uniq_gates:
-                key_list += sorted(path.std_keeping_gate() for path in gate_paths[gate])
+                key_list += sorted(gate_paths[gate])
             key = tuple(key_list)
             if key not in seen:
                 yield paths
             seen.add(key)
 
-    def _generate_paths(self, **kwargs):
-        gates = self.gates
-        if len(gates) == 1:
-            # here we can indeed generate paths
-            for path in self.generate_paths_generic(gates[0], **kwargs):
-                yield (path,)
-        else:
-            # here we consume all possible paths into memory - this is required for product
-            gate2list = {}
-            for gate in sorted(set(self.gates)):
-                gate2list[gate] = list(self.generate_paths_generic(gate, **kwargs))
-            path_lists = [gate2list[gate] for gate in self.gates]
-            logging.info('paths counts for each gate: %s', [len(lst) for lst in path_lists])
-            yield from itertools.product(*path_lists)
-
-    def generate_paths_generic(self, gate, start_max_count=100, finish_max_count=10 ** 6):
+    def generate_paths_generic(self, gate, start_max_count=100, finish_max_count=10**6, uniq=False):
         """Generate entrance-exit broken line."""
         N = self.div
         d = self.dim
@@ -417,6 +419,7 @@ class PathsGenerator:
         depth_st = time.time()
         max_len = N**d - finish_width
         found_paths = 0
+        seen_paths = set()
 
         for i, pid in enumerate(sorted(start.keys())):
             # вообще говоря, могут быть коллизии из-за hash()
@@ -440,9 +443,17 @@ class PathsGenerator:
                     for start_path in paths:
                         for fin_path in finish[mid_pid]:
                             path_data = self.glue_paths(start_path, mid_path, fin_path)
-                            if path_data is not None:
-                                found_paths += 1
-                                yield CurvePath.from_data(self.dim, self.div, path_data)
+                            if path_data is None:
+                                continue
+                            found_paths += 1
+                            result_path = CurvePath.from_data(self.dim, self.div, path_data)
+                            if uniq:
+                                result_path = result_path.std_keeping_gate()
+                                if result_path not in seen_paths:
+                                    yield result_path
+                                    seen_paths.add(result_path)
+                            else:
+                                yield result_path
 
             if self.verbose:
                 logging.info(
