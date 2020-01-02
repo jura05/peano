@@ -31,7 +31,7 @@ def get_gate(gate_str):
     return Gate(entrance=get_pt(entr_str), exit=get_pt(exit_str))
 
 
-def perebor(conf, idx=None):
+def perebor(conf, start_idx=None, end_idx=None):
     logging.warning('CONF: %s', conf)
     funcs = {
         'l1': utils.ratio_l1,
@@ -42,17 +42,24 @@ def perebor(conf, idx=None):
     ratio_func = funcs[conf['ratio_func_name']]
     dim, div = conf['dim'], conf['div']
     gates = None
-    if 'gates' in conf:
-        gates = [get_gate(g) for g in conf['gates']]
+    if 'gate_strs' in conf:
+        gates = [get_gate(g) for g in conf['gate_strs']]
+    elif 'gates' in conf:
+        gates = conf['gates']
+
     paths_gen = PathsGenerator(
         dim=dim, div=div, hdist=conf.get('hdist'), gates=gates, max_cdist=conf.get('max_cdist'),
     )
     paths_list = list(paths_gen.generate_paths(uniq=True))
     logging.warning('paths: %d', len(paths_list))
 
-    if idx is not None:
-        logging.warning('uniq paths idx: %d:%d', idx[0], idx[1])
-        paths = paths[idx[0]:idx[1]]
+    if end_idx is not None:
+        # should be checked first!
+        paths = list(paths)
+        paths = paths[:end_idx]
+    if start_idx is not None:
+        paths = list(paths)
+        paths = paths[start_idx:]
 
     estimator = Estimator(ratio_func, cache_max_size=2**16)
 
@@ -69,22 +76,24 @@ def perebor(conf, idx=None):
         upper_bound=conf.get('upper_bound'),
     )
 
-    logging.warning('CONF: %s', conf)
-    logging.warning('FINAL BOUNDS: %.6f <= r <= %.6f', res['lo'], res['up'])
+    if res is None:
+        res = {'lo': 0, 'up': float('inf')}
+
     res['paths_count'] = len(paths_list)
     res['lo_float'] = float(res['lo'])
     res['up_float'] = float(res['up'])
-    print(conf)
-    print(res)
+
+    print('CONFIG:', conf)
+    print('BOUNDS: {:.6f} <= r <= {:.6f}'.format(res['lo_float'], res['up_float']))
+    print('RESULT:', res, flush=True)
 
 
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser()
     argparser.add_argument('config')
-    #argparser.add_argument('--begin', type=int)
-    #argparser.add_argument('--end', type=int)
+    argparser.add_argument('--start', type=int)
+    argparser.add_argument('--end', type=int)
     args = argparser.parse_args()
     with open(args.config) as fh:
         config = json.load(fh)
-
-    perebor(config)
+    perebor(config, start_idx=args.start, end_idx=args.end)

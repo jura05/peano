@@ -836,6 +836,9 @@ class Estimator:
                 stats.update(res['stats'])
 
             active = sorted(new_active, key=lambda item: item.up)  # better to start with good curves
+            if not active:
+                # upper bound is too strong
+                return None
             curr_lo = min(item.lo for item in active)
             logging.warning('current bounds: [%.5f, %.5f]', curr_lo, curr_up)
 
