@@ -77,17 +77,16 @@ Gates: 401 total;
 
 * 0/4 vertex: 202
 (add means additional gate entrance/exit coordinates in {0,1})
-** 0/4 add: 35, with l2 below 20: 19
-best l2: **16.991**; gates: "(0,1/3,1/3)->(1/3,0,2/3)", "(0,1/3,1/3)->(1/3,1/3,1)"
-** 1/4 add: 2, with l2 below 20: 0
-** 2/4 add: 47, with l2 below 20: 0
-** 3/4 add: 58
-** 4/4 add: 60
+  * 0/4 add: 35, with l2 below 20: 19; best l2: **16.991**; gates: "(0,1/3,1/3)->(1/3,0,2/3)", "(0,1/3,1/3)->(1/3,1/3,1)"
+  * 1/4 add: 2, with l2 below 20: 0
+  * 2/4 add: 47, with l2 below 20: 0
+  * 3/4 add: 58
+  * 4/4 add: 60
 
-1/4 vertex: 135
-2/4 vertex: 31
-3/4 vertex: 28
-4/4 vertex: 5
+* 1/4 vertex: 135
+* 2/4 vertex: 31
+* 3/4 vertex: 28
+* 4/4 vertex: 5
 
 # Trifractals
 
